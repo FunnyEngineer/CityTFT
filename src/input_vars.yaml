@@ -1,0 +1,15 @@
+BUD_PROPS:
+  - Roof_z # height
+  - Wall_perimeter #footprint perimter
+  - Wall_aspect_ratio # Aspect ratio
+  - Wall_GlazingRatio # Glazing ratio
+  - Footprint_area # Footprint area
+  - Zone_Tmax # Temperature set-point # TBC
+  - Zone_Tmin # Temperature set-point # TBC
+  - Wall_UValue # Average walls U-value 
+  - Roof_UValue # Roof U-value through type id in <Composite>
+  - Floor_UValue # First Floor U-value through type id in <Composite>
+  - Wall_GlazingUValue # Average windows U-value W/m2k
+  - Wall_ShortWaveReflectance # Average walls short-wave reflectance n/a
+  - Roof_ShortWaveReflectance # Roof short-wave reflectance n/a
+  # - # Ventilation rate

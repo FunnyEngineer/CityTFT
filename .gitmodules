@@ -1,0 +1,3 @@
+[submodule "CitySim-Solver"]
+	path = CitySim-Solver
+	url = git@github.com:kaemco/CitySim-Solver.git

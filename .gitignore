@@ -1,0 +1,13 @@
+**/**result**/**
+**.zip
+CitySim-Solver/**
+data/**
+new_xml/**
+new_cli/**
+export/**
+*.out
+*.err
+lightning_logs/**
+CitySim-Solver/**
+.vscode/**
+CitySim-Solver/**
