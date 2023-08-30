@@ -1,17 +1,20 @@
 from dataset import CitySimDataModule
-from model import Net
+from model import Net, RNNNet
+
 from lightning.pytorch.callbacks import ModelCheckpoint
 import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
 import torch
 torch.set_float32_matmul_precision('highest')
 
+training_version = 'ts_v0'
+input_dim = 25
+input_seq_len = 24
 
-# Define a lightning module: neural network
+# set up the logger
+logger = TensorBoardLogger('', version=training_version)
 
-# Define a dataset
-
-logger = TensorBoardLogger('', version='normalized_load_2')
+# store the best model and the last model
 save_best = ModelCheckpoint(
     save_top_k=5,
     monitor='val/total_loss',
@@ -27,12 +30,23 @@ save_last = ModelCheckpoint(
     filename='epoch={epoch:02d}-step={global_step}-val_loss={val/total_loss:.2f}',
     auto_insert_metric_name=False,
 )
+
+# train the model
 trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1,
                     callbacks=[save_last, save_best])
-dm = CitySimDataModule()
+
+# init datamodule
+dm = CitySimDataModule(input_ts=input_seq_len)
 dm.setup(stage='fit')
-model = Net()
+
+# init model
+# model = Net()
+model = RNNNet(input_dim=input_dim, input_ts=input_seq_len)
+
+# train the model
 trainer.fit(model, datamodule=dm)
 dm.setup(stage='test')
+
+# test the model
 trainer.test(model, datamodule=dm)
 # trainer.predict(model, datamodule=dm)
