@@ -10,4 +10,5 @@ export/**
 lightning_logs/**
 CitySim-Solver/**
 .vscode/**
-CitySim-Solver/**
+**/*.pyc
+**/__pycache__/**
