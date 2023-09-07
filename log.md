@@ -40,3 +40,23 @@ source main.sh -x ./data/SRLOD3.1_Annual_results.xml -c data/climate/AUS_cli/CAM
 source main.sh -x ./data/SRLOD3.1_Annual_results.xml -c data/climate/AUS_cli/CAMP_MABRY_TX-RCP8.5-2040.cli -p ./new_cli -n ./new_xml -e ./export
 source main.sh -x ./data/SRLOD3.1_Annual_results.xml -c data/climate/AUS_cli/CAMP_MABRY_TX-RCP8.5-2050.cli -p ./new_cli -n ./new_xml -e ./export
 source main.sh -x ./data/SRLOD3.1_Annual_results.xml -c data/climate/AUS_cli/CAMP_MABRY_TX-RCP8.5-2100.cli -p ./new_cli -n ./new_xml -e ./export
+
+
+### 2023.08.30
+Experimental Evaluation
+1. Number in Test Dataset
+
+| MODEL | # of data |
+| CityDNN | 123 |
+| CityRNN | 199744 |
+
+| MODEL | COOL MSE | HEAT MSE | TOTAL MSE |
+| CityDNN | 850754535.3309836 | 711284811.7065043 | 1562039347.037488 |
+| CityRNN | 30026729.56328301 | 34863257.79955027 | 64889987.36283328 |
+
+
+## 2023.09.05 Discussion
+1. increase the weather file in dataset
+
+2. the defintion -> output file
+Suggorate model -> sequence modeling

@@ -40,8 +40,9 @@ class CitySimDataset(data.Dataset):
 
 
 class CitySimTSDataset(CitySimDataset):
-    def __init__(self, cli_df, res_df, bud_df, index, bud_key, input_ts, transform=None):
-        self.input_ts = input_ts
+    def __init__(self, cli_df, res_df, bud_df, index, bud_key, in_len,  out_len, transform=None):
+        self.in_len = in_len
+        self.out_len = out_len
         super().__init__(cli_df, res_df, bud_df, index, bud_key, transform)
 
     def __getitem__(self, idx):
@@ -50,21 +51,22 @@ class CitySimTSDataset(CitySimDataset):
         if type(idx) == int:
             idx = [idx]
 
-        bud = self.bud_df.loc[self.index[idx, 0], self.bud_key].to_numpy() # (batch, b_dim)
-        bud = np.repeat(np.expand_dims(bud, axis=1), self.input_ts, axis=1)  # (batch, input_ts, b_dim
+        bud = self.bud_df.loc[self.index[idx, 0], self.bud_key].to_numpy()  # (batch, b_dim)
+        bud = np.repeat(np.expand_dims(bud, axis=1), self.in_len, axis=1)  # (batch, in_len, b_dim
         cli = []
         for i in self.index[idx, 1]:
-            cli.append(self.cli_df.iloc[i:i+self.input_ts].to_numpy())
-        cli = np.array(cli)  # (batch, input_ts, c_dim)
+            cli.append(self.cli_df.iloc[i:i+self.in_len].to_numpy())
+        cli = np.array(cli)  # (batch, in_len, c_dim)
         res = []
         for i in self.index[idx]:
-            res.append(self.res_df.iloc[(i[1]+self.input_ts-1), (i[0]-5)*2:(i[0]-5)*2+2].to_numpy()) # the last time step is the target
-        res = np.array(res)  # (batch, input_ts, 2)
-        input = np.concatenate([bud, cli], axis=2)  # (batch, input_ts, b_dim+c_dim)
+            # the last time step is the target
+            res.append(self.res_df.iloc[i[1]:(i[1]+self.out_len),
+                       (i[0]-5)*2:(i[0]-5)*2+2].to_numpy())
+        res = np.array(res)  # (batch, out_len, 2)
+        input = np.concatenate([bud, cli], axis=2)  # (batch, in_len, b_dim+c_dim)
         if self.transform:
             return self.transform(input), res
         return input, res
-
 
 
 class CitySimDataModule(L.LightningDataModule):
@@ -74,7 +76,7 @@ class CitySimDataModule(L.LightningDataModule):
 
     def __init__(self, batch_size=64, cli_dir='./new_cli/citydnn',
                  cli_loc='Portland_OR-hour', res_dir='./data/citydnn',
-                 building_path='./data/ut_building_info.csv', input_ts=1, output_ts=0):
+                 building_path='./data/ut_building_info.csv', input_ts=1, output_ts=1):
         super().__init__()
         self.batch_size = batch_size
         self.cli_file = Path(cli_dir) / f'{cli_loc}.cli'
@@ -91,12 +93,18 @@ class CitySimDataModule(L.LightningDataModule):
         self.c_mean = -40422.87019045903
         self.c_std = 127541.16314976662
 
-        self.input_ts = input_ts # if 1, direct prediction, if >1, time series prediction
-        self.output_ts = output_ts  # if 0, means predict the same time step
+        self.input_ts = input_ts  # if 1, direct prediction, if >1, time series prediction
+        self.output_ts = output_ts  # if 1, means predict the same time step
         self.transform = transforms.Compose([transforms.ToTensor()])
 
     def prepare_data(self):
         pass
+
+    def heat_inverse_transform(self, heat):
+        return heat * self.h_std + self.h_mean
+
+    def cool_inverse_transform(self, cool):
+        return cool * self.c_std + self.c_mean
 
     def setup(self, stage=None):
         cli_df = read_climate_file(self.cli_file)
@@ -114,9 +122,9 @@ class CitySimDataModule(L.LightningDataModule):
         if stage == 'fit' or stage is None:
             if self.input_ts > 1:
                 self.train_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, train_index, self.bud_key, self.input_ts, self.transform)
+                    cli_df, res_df, bud_df, train_index, self.bud_key, self.input_ts, self.output_ts, self.transform)
                 self.val_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, val_index, self.bud_key, self.input_ts, self.transform)
+                    cli_df, res_df, bud_df, val_index, self.bud_key, self.input_ts, self.output_ts, self.transform)
             else:
                 self.train_dataset = CitySimDataset(
                     cli_df, res_df, bud_df, train_index, self.bud_key, self.transform)
@@ -125,7 +133,7 @@ class CitySimDataModule(L.LightningDataModule):
         if stage == 'test' or stage is None:
             if self.input_ts > 1:
                 self.test_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, test_index, self.bud_key, self.input_ts, self.transform)
+                    cli_df, res_df, bud_df, test_index, self.bud_key, self.input_ts, self.output_ts, self.transform)
             else:
                 self.test_dataset = CitySimDataset(
                     cli_df, res_df, bud_df, test_index, self.bud_key, self.transform)

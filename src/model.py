@@ -2,7 +2,6 @@ import lightning as L
 import torch
 import torch.nn as nn
 import pdb
-from matplotlib import pyplot as plt
 
 
 class Net(L.LightningModule):
@@ -21,32 +20,32 @@ class Net(L.LightningModule):
         x = x.view(x.size(0), -1).float()
         y = y.view(y.size(0), -1).float()
         return x, y
-    
+
     def forward(self, x):
         z = self.encoder(x)
         heat_hat = self.heat_decoder(z)
         cool_hat = self.cool_decoder(z)
         return heat_hat, cool_hat
-    
+
     def criterion(self, heat_hat, cool_hat, y):
         heat_loss = nn.functional.mse_loss(heat_hat, y[:, 0].unsqueeze(1))
         cool_loss = nn.functional.mse_loss(cool_hat, y[:, 1].unsqueeze(1))
         return heat_loss, cool_loss
-    
+
     def training_step(self, batch, batch_idx):
         x, y = self.split_reshape(batch)
-        
+
         heat_hat, cool_hat = self(x)
 
         heat_loss, cool_loss = self.criterion(heat_hat, cool_hat, y)
         loss = heat_loss + cool_loss
-        self.log_dict({"train/heat_loss": heat_loss,
-                      "train/cool_loss": cool_loss, "train/total_loss": loss, "global_step": self.global_step})
+        self.log_dict({"train/heat_loss": heat_loss, "train/cool_loss": cool_loss, 
+                       "train/total_loss": loss, "global_step": self.global_step})
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = self.split_reshape(batch)
-        
+
         heat_hat, cool_hat = self(x)
 
         heat_loss, cool_loss = self.criterion(heat_hat, cool_hat, y)
@@ -57,7 +56,7 @@ class Net(L.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, y = self.split_reshape(batch)
-        
+
         heat_hat, cool_hat = self(x)
 
         heat_loss, cool_loss = self.criterion(heat_hat, cool_hat, y)
@@ -84,18 +83,65 @@ class RNNNet(Net):
             nn.Linear(256, 128), nn.BatchNorm1d(128), nn.ReLU(), nn.Linear(128, 1))
         self.cool_decoder = nn.Sequential(
             nn.Linear(256, 128), nn.BatchNorm1d(128), nn.ReLU(), nn.Linear(128, 1))
-    
+
     def forward(self, x):
         z, _ = self.encoder(x)
         z = z[:, -1, :]
         heat_hat = self.heat_decoder(z)
         cool_hat = self.cool_decoder(z)
         return heat_hat, cool_hat
-    
+
     def split_reshape(self, batch):
         x, y = batch
         x = x.view(x.size(0), self.input_ts, -1).float()
         y = y.view(y.size(0), -1).float()
         return x, y
+
+class PermuteSeq(nn.Module):
+    def __init__(self):
+        super().__init__()
     
+    def forward(self, x):
+        return x.permute(0, 2, 1)
+
+class RNNSeqNet(RNNNet):
+    def __init__(self, input_dim, input_ts, output_ts):
+        super().__init__(input_dim, input_ts)
+        self.output_ts = output_ts
+
+        self.encoder = nn.LSTM(input_size=self.input_dim,
+                               hidden_size=256,
+                               num_layers=2,
+                               batch_first=True)
+        self.heat_decoder_seq = nn.LSTM(input_size=256,
+                               hidden_size=256,
+                               num_layers=2,
+                               batch_first=True)
+        self.cool_decoder_seq = nn.LSTM(input_size=256,
+                               hidden_size=256,
+                               num_layers=2,
+                               batch_first=True)
+        self.heat_decoder = nn.Sequential(
+            nn.Linear(256, 128), PermuteSeq(), nn.BatchNorm1d(128), PermuteSeq(), nn.ReLU(), nn.Linear(128, 1))
+        self.cool_decoder = nn.Sequential(
+            nn.Linear(256, 128), PermuteSeq(), nn.BatchNorm1d(128), PermuteSeq(), nn.ReLU(), nn.Linear(128, 1))
+        
+    def forward(self, x):
+        z, encode_hidden = self.encoder(x)
+        heat_hat_seq, _ = self.heat_decoder_seq(z, encode_hidden)
+        cool_hat_seq, _ = self.cool_decoder_seq(z, encode_hidden)
+        heat_hat = self.heat_decoder(heat_hat_seq)
+        cool_hat = self.cool_decoder(cool_hat_seq)
+        return heat_hat, cool_hat
     
+
+    def split_reshape(self, batch):
+        x, y = batch
+        x = x.view(x.size(0), self.input_ts, -1).float()
+        y = y.view(y.size(0), self.output_ts, -1).float()
+        return x, y
+    
+    def criterion(self, heat_hat, cool_hat, y):
+        heat_loss = nn.functional.mse_loss(heat_hat, y[:, :, 0].unsqueeze(2))
+        cool_loss = nn.functional.mse_loss(cool_hat, y[:, :, 1].unsqueeze(2))
+        return heat_loss, cool_loss
