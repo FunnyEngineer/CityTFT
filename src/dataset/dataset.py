@@ -1,3 +1,4 @@
+from typing import Optional, Sequence, Union
 import torch.utils.data as data
 import lightning as L
 import torch
@@ -7,6 +8,8 @@ import yaml
 from pathlib import Path
 from utils.misc import *
 
+from darts.utils.data.sequential_dataset import MixedCovariatesSequentialDataset
+from darts import TimeSeries
 
 class CitySimDataset(data.Dataset):
     def __init__(self, cli_df, res_df, bud_df, index, bud_key, transform=None):
@@ -96,7 +99,6 @@ class CitySimDataModule(L.LightningDataModule):
         self.input_ts = input_ts  # if 1, direct prediction, if >1, time series prediction
         self.output_ts = output_ts  # if 1, means predict the same time step
         self.transform = transforms.Compose([transforms.ToTensor()])
-
     def prepare_data(self):
         pass
 
@@ -119,6 +121,7 @@ class CitySimDataModule(L.LightningDataModule):
         generator1 = torch.Generator().manual_seed(1340)
         train_index, val_index, test_index = torch.utils.data.random_split(
             index, [0.64, 0.16, 0.2], generator=generator1)
+        
         if stage == 'fit' or stage is None:
             if self.input_ts > 1:
                 self.train_dataset = CitySimTSDataset(
@@ -153,3 +156,26 @@ class CitySimDataModule(L.LightningDataModule):
     def predict_dataloader(self):
         return data.DataLoader(self.test_dataset, batch_size=self.batch_size,
                                num_workers=20)
+
+
+# dataset for darts and TFT model
+# class CitySimDartsDataset(MixedCovariatesSequentialDataset):
+#     def __init__(self, target_series: TimeSeries | Sequence[TimeSeries], past_covariates: TimeSeries | Sequence[TimeSeries] | None = None, 
+#                  future_covariates: TimeSeries | Sequence[TimeSeries] | None = None, 
+#                  input_chunk_length: int = 12, output_chunk_length: int = 1,
+#                  max_samples_per_ts: int | None = None, use_static_covariates: bool = True):
+#         cli_df = read_climate_file(self.cli_file)
+#         res_file = self.res_dir / self.cli_loc / f'{self.cli_loc}_TH.out'
+#         res_df = read_result_file(res_file)
+#         res_df = normalize_load(res_df, self.h_mean, self.h_std, self.c_mean, self.c_std)
+#         bud_df = read_building_info(self.building_path)
+#         bud_index = bud_df.id.to_numpy()
+#         cli_index = cli_df.index[:len(cli_df)-self.input_ts+1]
+#         index = np.array([np.tile(bud_index, len(cli_index)),
+#                          np.repeat(cli_index, len(bud_index))]).T
+#         for i in range(len(res_df.columns) // 2):
+
+#         target_series = TimeSeries.from_dataframe(res_df)
+#         super().__init__(target_series, past_covariates, future_covariates, input_chunk_length,
+#                          output_chunk_length, max_samples_per_ts, use_static_covariates)
+       

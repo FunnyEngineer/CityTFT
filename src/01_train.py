@@ -1,5 +1,5 @@
-from dataset import CitySimDataModule
-from model import Net, RNNNet
+from dataset.dataset import CitySimDataModule
+from model.model import Net, RNNNet
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 import lightning as L

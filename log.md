@@ -60,3 +60,11 @@ Experimental Evaluation
 
 2. the defintion -> output file
 Suggorate model -> sequence modeling
+
+
+## 2023.09.07 Config setting
+1. Starting to develop TFT model
+    Code taken from "https://github.com/NVIDIA/DeepLearningExamples/blob/master/PyTorch/Forecasting/TFT"
+
+2. Starting setting config in their repo
+    -> building props = STATIC

@@ -1,6 +1,6 @@
 import pdb
-from model import Net, RNNNet
-from dataset import CitySimDataModule
+from model.model import Net, RNNNet
+from dataset.dataset import CitySimDataModule
 import lightning as L
 import torch.nn as nn
 import torch
