@@ -2,7 +2,7 @@ from darts.models.forecasting.tft_model import TFTModel
 import argparse
 from dataset.dataset import CitySimDataModule
 from dataset.tft_dataset import CitySimTFTDataModule
-from model.model import Net, RNNSeqNet
+from model.model import Net, RNNSeqNet, TransformerSeqNet
 from model.model_tft import TemporalFusionTransformer
 from configuration import CONFIGS
 
@@ -58,6 +58,28 @@ def RNN_train():
     # test the model
     trainer.test(model, datamodule=dm)
 
+def Trans_train():
+    logger = TensorBoardLogger('', version='transformer_seq_v0')
+
+    save_best, save_last = setting_logger()
+    # train the model
+    trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1,
+                    callbacks=[save_last, save_best])
+    
+    # init datamodule
+    dm = CitySimDataModule(input_ts=input_seq_len, output_ts=input_seq_len)
+    dm.setup(stage='fit')
+
+    # init model
+    model = TransformerSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
+
+    # train the model
+    trainer.fit(model, datamodule=dm)
+    dm.setup(stage='test')
+
+    # test the model
+    trainer.test(model, datamodule=dm)
+
 def TFT_train(args):
     logger = TensorBoardLogger('', version='tft_seq_quantile_loss_v0.1')
     save_best, save_last = setting_logger()
@@ -85,13 +107,14 @@ def TFT_train(args):
 
 def main(args):
     # RNN_train()
-    TFT_train(args)
+    # TFT_train(args)
+    Trans_train()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--encoder_length', type=int, default=24)
     parser.add_argument('--dataset', type=str, required=True, choices=CONFIGS.keys(),
-                        help='Dataset name')
+                        help='Dataset name', default='citysim')
     parser.add_argument('--epochs', type=int, default=25,
                         help='Default number of training epochs')
     parser.add_argument('--sample_data', type=lambda x: int(float(x)), nargs=2, default=[-1, -1],

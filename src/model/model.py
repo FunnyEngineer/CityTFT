@@ -39,7 +39,7 @@ class Net(L.LightningModule):
 
         heat_loss, cool_loss = self.criterion(heat_hat, cool_hat, y)
         loss = heat_loss + cool_loss
-        self.log_dict({"train/heat_loss": heat_loss, "train/cool_loss": cool_loss, 
+        self.log_dict({"train/heat_loss": heat_loss, "train/cool_loss": cool_loss,
                        "train/total_loss": loss, "global_step": self.global_step})
         return loss
 
@@ -97,12 +97,14 @@ class RNNNet(Net):
         y = y.view(y.size(0), -1).float()
         return x, y
 
+
 class PermuteSeq(nn.Module):
     def __init__(self):
         super().__init__()
-    
+
     def forward(self, x):
         return x.permute(0, 2, 1)
+
 
 class RNNSeqNet(RNNNet):
     def __init__(self, input_dim, input_ts, output_ts):
@@ -114,18 +116,18 @@ class RNNSeqNet(RNNNet):
                                num_layers=2,
                                batch_first=True)
         self.heat_decoder_seq = nn.LSTM(input_size=256,
-                               hidden_size=256,
-                               num_layers=2,
-                               batch_first=True)
+                                        hidden_size=256,
+                                        num_layers=2,
+                                        batch_first=True)
         self.cool_decoder_seq = nn.LSTM(input_size=256,
-                               hidden_size=256,
-                               num_layers=2,
-                               batch_first=True)
+                                        hidden_size=256,
+                                        num_layers=2,
+                                        batch_first=True)
         self.heat_decoder = nn.Sequential(
             nn.Linear(256, 128), PermuteSeq(), nn.BatchNorm1d(128), PermuteSeq(), nn.ReLU(), nn.Linear(128, 1))
         self.cool_decoder = nn.Sequential(
             nn.Linear(256, 128), PermuteSeq(), nn.BatchNorm1d(128), PermuteSeq(), nn.ReLU(), nn.Linear(128, 1))
-        
+
     def forward(self, x):
         z, encode_hidden = self.encoder(x)
         heat_hat_seq, _ = self.heat_decoder_seq(z, encode_hidden)
@@ -133,15 +135,47 @@ class RNNSeqNet(RNNNet):
         heat_hat = self.heat_decoder(heat_hat_seq)
         cool_hat = self.cool_decoder(cool_hat_seq)
         return heat_hat, cool_hat
-    
 
     def split_reshape(self, batch):
         x, y = batch
         x = x.view(x.size(0), self.input_ts, -1).float()
         y = y.view(y.size(0), self.output_ts, -1).float()
         return x, y
-    
+
     def criterion(self, heat_hat, cool_hat, y):
         heat_loss = nn.functional.mse_loss(heat_hat, y[:, :, 0].unsqueeze(2))
         cool_loss = nn.functional.mse_loss(cool_hat, y[:, :, 1].unsqueeze(2))
         return heat_loss, cool_loss
+
+
+class TransformerSeqNet(RNNSeqNet):
+    def __init__(self, input_dim, input_ts, output_ts):
+        super().__init__(input_dim, input_ts, output_ts)
+        self.num_encoder_layers = 2
+        self.num_decoder_layers = 2
+
+        self.linear_embed = nn.Linear(25, 256)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=256, nhead=8, dim_feedforward=256, batch_first=True)
+        encoder_norm = nn.LayerNorm(256)
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer, self.num_encoder_layers, encoder_norm)
+
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=256, nhead=8, dim_feedforward=256, batch_first=True)
+        decoder_norm = nn.LayerNorm(256)
+        self.heat_decoder_seq = nn.TransformerDecoder(
+            decoder_layer=decoder_layer, num_layers=self.num_decoder_layers, norm=decoder_norm)
+        self.cool_decoder_seq = nn.TransformerDecoder(
+            decoder_layer=decoder_layer, num_layers=self.num_decoder_layers, norm=decoder_norm)
+
+        self.save_hyperparameters()
+
+    def forward(self, x):
+        embed_x = self.linear_embed(x)
+        z = self.encoder(embed_x)
+        heat_hat_seq = self.heat_decoder_seq(embed_x, z)
+        cool_hat_seq = self.cool_decoder_seq(embed_x, z)
+        heat_hat = self.heat_decoder(heat_hat_seq)
+        cool_hat = self.cool_decoder(cool_hat_seq)
+        return heat_hat, cool_hat
