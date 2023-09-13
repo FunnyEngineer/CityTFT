@@ -14,9 +14,10 @@ rnn_model_path = 'lightning_logs/ts_v0/checkpoints/epoch=287-step=2868767.0-val_
 
 fig_path = f'figs/dnn_input={input_seq_len}_output=0'
 
-# model = RNNNet(input_dim=25, input_ts=24).load_from_checkpoint(rnn_model_path)
+model2 = RNNNet(input_dim=25, input_ts=24).load_from_checkpoint(rnn_model_path)
 model = Net().load_from_checkpoint(dnn_model_path)
 model.eval().to('cpu')
+model2.eval().to('cpu')
 
 
 dm = CitySimDataModule(input_ts=input_seq_len)
@@ -29,10 +30,13 @@ fig_path.mkdir(parents=True, exist_ok=True)
 for i, batch in enumerate(dm.test_dataloader()):
     x, y = model.split_reshape(batch)
     heat_hat, cool_hat = model(x)
+    heat_rnn, cool_rnn = model2(x)
     y[:, 0] = dm.heat_inverse_transform(y[:, 0])
     y[:, 1] = dm.cool_inverse_transform(y[:, 1])
     heat_hat = dm.heat_inverse_transform(heat_hat)
     cool_hat = dm.cool_inverse_transform(cool_hat)
+    heat_rnn = dm.heat_inverse_transform(heat_rnn)
+    cool_rnn = dm.cool_inverse_transform(cool_rnn)
     plot_heat_cool(y, heat_hat, cool_hat, fig_path/f'{i}.png')
     if i == 10:
         break

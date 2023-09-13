@@ -11,6 +11,7 @@ from utils.misc import *
 from darts.utils.data.sequential_dataset import MixedCovariatesSequentialDataset
 from darts import TimeSeries
 
+
 class CitySimDataset(data.Dataset):
     def __init__(self, cli_df, res_df, bud_df, index, bud_key, transform=None):
         self.cli_df = cli_df
@@ -43,10 +44,11 @@ class CitySimDataset(data.Dataset):
 
 
 class CitySimTSDataset(CitySimDataset):
-    def __init__(self, cli_df, res_df, bud_df, index, bud_key, in_len,  out_len, transform=None):
+    def __init__(self, cli_df, res_df, bud_df, index, bud_key, in_len,  out_len, mode='rnn', transform=None):
+        super().__init__(cli_df, res_df, bud_df, index, bud_key, transform)
         self.in_len = in_len
         self.out_len = out_len
-        super().__init__(cli_df, res_df, bud_df, index, bud_key, transform)
+        self.mode = mode
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
@@ -57,9 +59,13 @@ class CitySimTSDataset(CitySimDataset):
         bud = self.bud_df.loc[self.index[idx, 0], self.bud_key].to_numpy()  # (batch, b_dim)
         bud = np.repeat(np.expand_dims(bud, axis=1), self.in_len, axis=1)  # (batch, in_len, b_dim
         cli = []
+        ts = []
         for i in self.index[idx, 1]:
             cli.append(self.cli_df.iloc[i:i+self.in_len].to_numpy())
+            ts.append(np.arange(i, i+self.in_len) / 8760)
         cli = np.array(cli)  # (batch, in_len, c_dim)
+        ts = np.array(ts)  # (batch, in_len, 1)
+        
         res = []
         for i in self.index[idx]:
             # the last time step is the target
@@ -67,9 +73,9 @@ class CitySimTSDataset(CitySimDataset):
                        (i[0]-5)*2:(i[0]-5)*2+2].to_numpy())
         res = np.array(res)  # (batch, out_len, 2)
         input = np.concatenate([bud, cli], axis=2)  # (batch, in_len, b_dim+c_dim)
-        if self.transform:
-            return self.transform(input), res
-        return input, res
+        if self.mode == 'atten':
+            return self.transform(input), res, ts
+        return self.transform(input), res
 
 
 class CitySimDataModule(L.LightningDataModule):
@@ -79,7 +85,7 @@ class CitySimDataModule(L.LightningDataModule):
 
     def __init__(self, batch_size=64, cli_dir='./new_cli/citydnn',
                  cli_loc='Portland_OR-hour', res_dir='./data/citydnn',
-                 building_path='./data/ut_building_info.csv', input_ts=1, output_ts=1):
+                 building_path='./data/ut_building_info.csv', input_ts=1, output_ts=1, mode='rnn'):
         super().__init__()
         self.batch_size = batch_size
         self.cli_file = Path(cli_dir) / f'{cli_loc}.cli'
@@ -88,6 +94,7 @@ class CitySimDataModule(L.LightningDataModule):
         self.building_path = building_path
         self.bud_key = yaml.load(open('src/input_vars.yaml', 'r'),
                                  Loader=yaml.FullLoader)['BUD_PROPS']
+        self.mode = mode
 
         self.heat_key = 'Heating(Wh)'
         self.cool_key = 'Cooling(Wh)'
@@ -99,6 +106,7 @@ class CitySimDataModule(L.LightningDataModule):
         self.input_ts = input_ts  # if 1, direct prediction, if >1, time series prediction
         self.output_ts = output_ts  # if 1, means predict the same time step
         self.transform = transforms.Compose([transforms.ToTensor()])
+
     def prepare_data(self):
         pass
 
@@ -121,13 +129,13 @@ class CitySimDataModule(L.LightningDataModule):
         generator1 = torch.Generator().manual_seed(1340)
         train_index, val_index, test_index = torch.utils.data.random_split(
             index, [0.64, 0.16, 0.2], generator=generator1)
-        
+
         if stage == 'fit' or stage is None:
             if self.input_ts > 1:
                 self.train_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, train_index, self.bud_key, self.input_ts, self.output_ts, self.transform)
+                    cli_df, res_df, bud_df, train_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
                 self.val_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, val_index, self.bud_key, self.input_ts, self.output_ts, self.transform)
+                    cli_df, res_df, bud_df, val_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
             else:
                 self.train_dataset = CitySimDataset(
                     cli_df, res_df, bud_df, train_index, self.bud_key, self.transform)
@@ -160,8 +168,8 @@ class CitySimDataModule(L.LightningDataModule):
 
 # dataset for darts and TFT model
 # class CitySimDartsDataset(MixedCovariatesSequentialDataset):
-#     def __init__(self, target_series: TimeSeries | Sequence[TimeSeries], past_covariates: TimeSeries | Sequence[TimeSeries] | None = None, 
-#                  future_covariates: TimeSeries | Sequence[TimeSeries] | None = None, 
+#     def __init__(self, target_series: TimeSeries | Sequence[TimeSeries], past_covariates: TimeSeries | Sequence[TimeSeries] | None = None,
+#                  future_covariates: TimeSeries | Sequence[TimeSeries] | None = None,
 #                  input_chunk_length: int = 12, output_chunk_length: int = 1,
 #                  max_samples_per_ts: int | None = None, use_static_covariates: bool = True):
 #         cli_df = read_climate_file(self.cli_file)
@@ -178,4 +186,3 @@ class CitySimDataModule(L.LightningDataModule):
 #         target_series = TimeSeries.from_dataframe(res_df)
 #         super().__init__(target_series, past_covariates, future_covariates, input_chunk_length,
 #                          output_chunk_length, max_samples_per_ts, use_static_covariates)
-       

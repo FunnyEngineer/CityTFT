@@ -68,3 +68,34 @@ Suggorate model -> sequence modeling
 
 2. Starting setting config in their repo
     -> building props = STATIC
+
+
+# model size comparision
+ - Hybrid Trans-RNN model
+  | Name             | Type               | Params
+--------------------------------------------------------
+0 | encoder          | TransformerEncoder | 792 K 
+1 | heat_decoder     | Sequential         | 33.3 K
+2 | cool_decoder     | Sequential         | 33.3 K
+3 | heat_decoder_seq | LSTM               | 1.1 M 
+4 | cool_decoder_seq | LSTM               | 1.1 M 
+5 | linear_embed     | Linear             | 6.7 K 
+--------------------------------------------------------
+
+ - Transformer Model (With TS involved)
+  | Name             | Type               | Params
+--------------------------------------------------------
+0 | encoder          | TransformerEncoder | 792 K 
+1 | heat_decoder     | Sequential         | 33.3 K
+2 | cool_decoder     | Sequential         | 33.3 K
+3 | heat_decoder_seq | TransformerDecoder | 1.3 M 
+4 | cool_decoder_seq | TransformerDecoder | 1.3 M 
+5 | linear_embed     | Linear             | 6.7 K 
+6 | linear_embed_ts  | Linear             | 512   
+--------------------------------------------------------
+3.5 M     Trainable params
+0         Non-trainable params
+3.5 M     Total params
+14.017    Total estimated model params size (MB)
+
+

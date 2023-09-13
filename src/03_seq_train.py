@@ -2,7 +2,7 @@ from darts.models.forecasting.tft_model import TFTModel
 import argparse
 from dataset.dataset import CitySimDataModule
 from dataset.tft_dataset import CitySimTFTDataModule
-from model.model import Net, RNNSeqNet, TransformerSeqNet
+from model.model import Net, RNNSeqNet, TransformerSeqNet, HybridRNNAttenNet
 from model.model_tft import TemporalFusionTransformer
 from configuration import CONFIGS
 
@@ -16,6 +16,7 @@ torch.set_float32_matmul_precision('highest')
 training_version = 'rnn_seq_v0'
 input_dim = 25
 input_seq_len = 24
+
 
 def setting_logger():
     # store the best model and the last model
@@ -36,14 +37,15 @@ def setting_logger():
     )
     return save_best, save_last
 
+
 def RNN_train():
-    logger = TensorBoardLogger('', version=training_version)
+    logger = TensorBoardLogger('', version='0_testing')
 
     save_best, save_last = setting_logger()
     # train the model
     trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1,
-                    callbacks=[save_last, save_best])
-    
+                        callbacks=[save_last, save_best])
+
     # init datamodule
     dm = CitySimDataModule(input_ts=input_seq_len, output_ts=input_seq_len)
     dm.setup(stage='fit')
@@ -58,20 +60,22 @@ def RNN_train():
     # test the model
     trainer.test(model, datamodule=dm)
 
+
 def Trans_train():
-    logger = TensorBoardLogger('', version='transformer_seq_v0')
+    logger = TensorBoardLogger('', version='trans_with_ts_v1_adamw_lr_1e-4')
 
     save_best, save_last = setting_logger()
     # train the model
     trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1,
-                    callbacks=[save_last, save_best])
-    
+                        callbacks=[save_last, save_best])
+
     # init datamodule
-    dm = CitySimDataModule(input_ts=input_seq_len, output_ts=input_seq_len)
+    dm = CitySimDataModule(input_ts=input_seq_len, output_ts=input_seq_len, mode='atten')
     dm.setup(stage='fit')
 
     # init model
     model = TransformerSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
+    # model = HybridRNNAttenNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
 
     # train the model
     trainer.fit(model, datamodule=dm)
@@ -80,14 +84,14 @@ def Trans_train():
     # test the model
     trainer.test(model, datamodule=dm)
 
+
 def TFT_train(args):
     logger = TensorBoardLogger('', version='tft_seq_quantile_loss_v0.1')
     save_best, save_last = setting_logger()
 
-
     trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1,
-                    callbacks=[save_last, save_best])
-    
+                        callbacks=[save_last, save_best])
+
     dm = CitySimTFTDataModule(input_ts=input_seq_len, output_ts=input_seq_len)
 
     dm.setup(stage='fit')
@@ -98,17 +102,18 @@ def TFT_train(args):
     config = CONFIGS[args.dataset]()
     model = TemporalFusionTransformer(config)
 
-    
     trainer.fit(model, datamodule=dm)
     dm.setup(stage='test')
 
     # test the model
     trainer.test(model, datamodule=dm)
 
+
 def main(args):
     # RNN_train()
     # TFT_train(args)
     Trans_train()
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -133,15 +138,17 @@ if __name__ == '__main__':
     parser.add_argument('--log_file', type=str, default='dllogger.json',
                         help='Name of dllogger output file')
     parser.add_argument('--overwrite_config', type=str, default='',
-                       help='JSON string used to overload config')
+                        help='JSON string used to overload config')
     parser.add_argument('--affinity', type=str,
-                         default='socket_unique_interleaved',
-                         choices=['socket', 'single', 'single_unique',
-                                  'socket_unique_interleaved',
-                                  'socket_unique_continuous',
-                                  'disabled'],
-                         help='type of CPU affinity')
-    parser.add_argument("--ema_decay", type=float, default=0.0, help='Use exponential moving average')
-    parser.add_argument("--disable_benchmark", action='store_true', help='Disable benchmarking mode')
+                        default='socket_unique_interleaved',
+                        choices=['socket', 'single', 'single_unique',
+                                 'socket_unique_interleaved',
+                                 'socket_unique_continuous',
+                                 'disabled'],
+                        help='type of CPU affinity')
+    parser.add_argument("--ema_decay", type=float, default=0.0,
+                        help='Use exponential moving average')
+    parser.add_argument("--disable_benchmark", action='store_true',
+                        help='Disable benchmarking mode')
     ARGS = parser.parse_args()
     main(ARGS)
