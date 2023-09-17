@@ -114,7 +114,7 @@ Suggorate model -> sequence modeling
 3.5 M     Total params
 14.017    Total estimated model params size (MB)
 
-- Transformer Model V2 (Encoder for decoder)
+- Transformer Model V2 (Applied Encoder for decoder)
   | Name             | Type               | Params
 --------------------------------------------------------
 0 | encoder          | TransformerEncoder | 792 K 
@@ -131,3 +131,22 @@ Suggorate model -> sequence modeling
 9.797     Total estimated model params size (MB)
 Epoch 0:   0%|                                    
 
+
+
+## 2023.09.16 new model architecture
+
+- Transformer Model V2 (larget model architecture)
+  | Name             | Type               | Params
+--------------------------------------------------------
+0 | encoder          | TransformerEncoder | 792 K 
+1 | heat_decoder     | Sequential         | 33.3 K
+2 | cool_decoder     | Sequential         | 33.3 K
+3 | heat_decoder_seq | TransformerEncoder | 2.6 M 
+4 | cool_decoder_seq | TransformerEncoder | 2.6 M 
+5 | linear_embed     | Linear             | 6.9 K 
+6 | linear_embed_ts  | Linear             | 512   
+--------------------------------------------------------
+6.1 M     Trainable params
+0         Non-trainable params
+6.1 M     Total params
+24.505    Total estimated model params size (MB)

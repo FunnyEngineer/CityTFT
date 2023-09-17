@@ -211,7 +211,7 @@ class TransNetV2(TransformerSeqNet):
 
 
         decoder_layer = nn.TransformerEncoderLayer(
-            d_model=256, batch_first=True)
+            d_model=256, nhead=8, batch_first=True)
         self.heat_decoder_seq = nn.TransformerEncoder(
             decoder_layer, self.num_decoder_layers, encoder_norm)
         self.cool_decoder_seq = nn.TransformerEncoder(
