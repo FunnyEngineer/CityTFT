@@ -194,6 +194,53 @@ class TransformerSeqNet(RNNSeqNet):
     
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-4)
+
+class TransNetV2(TransformerSeqNet):
+    def __init__(self, input_dim, input_ts, output_ts):
+        super().__init__(input_dim, input_ts, output_ts)
+        self.num_encoder_layers = 2
+        self.num_decoder_layers = 2
+
+        self.linear_embed = nn.Linear(26, 256)
+        self.linear_embed_ts = nn.Linear(1, 256)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=256, nhead=8, dim_feedforward=256, batch_first=True)
+        encoder_norm = nn.LayerNorm(256)
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer, self.num_encoder_layers, encoder_norm)
+
+
+        decoder_layer = nn.TransformerEncoderLayer(
+            d_model=256, batch_first=True)
+        self.heat_decoder_seq = nn.TransformerEncoder(
+            decoder_layer, self.num_decoder_layers, encoder_norm)
+        self.cool_decoder_seq = nn.TransformerEncoder(
+            decoder_layer, self.num_decoder_layers, encoder_norm)
+
+        self.save_hyperparameters()
+
+    def split_reshape(self, batch):
+        x, y, ts = batch
+        x = x.view(x.size(0), self.input_ts, -1).float()
+        y = y.view(y.size(0), self.output_ts, -1).float()
+        ts = ts.view(ts.size(0), self.output_ts, -1).float()
+        x = torch.cat((x, ts), dim=-1)
+        return x, y
+
+    def forward(self, x):
+        # ts = x[:, :, -1].unsqueeze(2)
+        # x = x[:, :, :-1]
+
+        embed_x = self.linear_embed(x)
+        z = self.encoder(embed_x)
+        heat_hat_seq = self.heat_decoder_seq(z)
+        cool_hat_seq = self.cool_decoder_seq(z)
+        heat_hat = self.heat_decoder(heat_hat_seq)
+        cool_hat = self.cool_decoder(cool_hat_seq)
+        return heat_hat, cool_hat
+    
+    def configure_optimizers(self):
+        return torch.optim.AdamW(self.parameters(), lr=1e-3)
     
 
 class HybridRNNAttenNet(RNNSeqNet):

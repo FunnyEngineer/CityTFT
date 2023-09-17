@@ -2,7 +2,7 @@ from darts.models.forecasting.tft_model import TFTModel
 import argparse
 from dataset.dataset import CitySimDataModule
 from dataset.tft_dataset import CitySimTFTDataModule
-from model.model import Net, RNNSeqNet, TransformerSeqNet, HybridRNNAttenNet
+from model.model import Net, RNNSeqNet, TransformerSeqNet, HybridRNNAttenNet, TransNetV2
 from model.model_tft import TemporalFusionTransformer
 from configuration import CONFIGS
 
@@ -25,21 +25,21 @@ def setting_logger():
         monitor='val/total_loss',
         mode='min',
         save_last=True,
-        filename='epoch={epoch:02d}-step={global_step}-val_loss={val/total_loss:.2f}',
+        filename='epoch={epoch:02d}-step={global_step}-val_loss={val/total_loss:.8f}',
         auto_insert_metric_name=False,
     )
     save_last = ModelCheckpoint(
         save_top_k=5,
         monitor="global_step",
         mode="max",
-        filename='epoch={epoch:02d}-step={global_step}-val_loss={val/total_loss:.2f}',
+        filename='epoch={epoch:02d}-step={global_step}-val_loss={val/total_loss:.8f}',
         auto_insert_metric_name=False,
     )
     return save_best, save_last
 
 
 def RNN_train():
-    logger = TensorBoardLogger('', version='0_testing')
+    logger = TensorBoardLogger('', version='rnn_seq_v1')
 
     save_best, save_last = setting_logger()
     # train the model
@@ -62,7 +62,7 @@ def RNN_train():
 
 
 def Trans_train():
-    logger = TensorBoardLogger('', version='trans_with_ts_v1_adamw_lr_1e-4')
+    logger = TensorBoardLogger('', version='trans_larger_decoder_v3_adamw_lr_1e-3')
 
     save_best, save_last = setting_logger()
     # train the model
@@ -74,7 +74,8 @@ def Trans_train():
     dm.setup(stage='fit')
 
     # init model
-    model = TransformerSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
+    model = TransNetV2(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
+    # model = TransformerSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
     # model = HybridRNNAttenNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
 
     # train the model

@@ -144,7 +144,7 @@ class CitySimDataModule(L.LightningDataModule):
         if stage == 'test' or stage is None:
             if self.input_ts > 1:
                 self.test_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, test_index, self.bud_key, self.input_ts, self.output_ts, self.transform)
+                    cli_df, res_df, bud_df, test_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
             else:
                 self.test_dataset = CitySimDataset(
                     cli_df, res_df, bud_df, test_index, self.bud_key, self.transform)

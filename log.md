@@ -71,6 +71,22 @@ Suggorate model -> sequence modeling
 
 
 # model size comparision
+ - RNN Sequence Model
+
+  | Name             | Type       | Params
+------------------------------------------------
+0 | encoder          | LSTM       | 816 K 
+1 | heat_decoder     | Sequential | 33.3 K
+2 | cool_decoder     | Sequential | 33.3 K
+3 | heat_decoder_seq | LSTM       | 1.1 M 
+4 | cool_decoder_seq | LSTM       | 1.1 M 
+------------------------------------------------
+3.0 M     Trainable params
+0         Non-trainable params
+3.0 M     Total params
+11.952    Total estimated model params size (MB)
+
+
  - Hybrid Trans-RNN model
   | Name             | Type               | Params
 --------------------------------------------------------
@@ -98,4 +114,20 @@ Suggorate model -> sequence modeling
 3.5 M     Total params
 14.017    Total estimated model params size (MB)
 
+- Transformer Model V2 (Encoder for decoder)
+  | Name             | Type               | Params
+--------------------------------------------------------
+0 | encoder          | TransformerEncoder | 792 K 
+1 | heat_decoder     | Sequential         | 33.3 K
+2 | cool_decoder     | Sequential         | 33.3 K
+3 | heat_decoder_seq | TransformerEncoder | 792 K 
+4 | cool_decoder_seq | TransformerEncoder | 792 K 
+5 | linear_embed     | Linear             | 6.9 K 
+6 | linear_embed_ts  | Linear             | 512   
+--------------------------------------------------------
+2.4 M     Trainable params
+0         Non-trainable params
+2.4 M     Total params
+9.797     Total estimated model params size (MB)
+Epoch 0:   0%|                                    
 
