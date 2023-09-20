@@ -8,8 +8,11 @@ import yaml
 from pathlib import Path
 from utils.misc import *
 
-from darts.utils.data.sequential_dataset import MixedCovariatesSequentialDataset
-from darts import TimeSeries
+# global mean and std
+h_mean = 124264.10207582312
+h_std = 209963.99301021238
+c_mean = -40422.87019045903
+c_std = 127541.16314976662
 
 
 class CitySimDataset(data.Dataset):
@@ -65,7 +68,7 @@ class CitySimTSDataset(CitySimDataset):
             ts.append(np.arange(i, i+self.in_len) / 8760)
         cli = np.array(cli)  # (batch, in_len, c_dim)
         ts = np.array(ts)  # (batch, in_len, 1)
-        
+
         res = []
         for i in self.index[idx]:
             # the last time step is the target
@@ -78,22 +81,80 @@ class CitySimTSDataset(CitySimDataset):
         return self.transform(input), res
 
 
+class CSTSMultiClimateDataset(data.Dataset):
+    def __init__(self, cli_dir, res_dir, cli_locs, bud_path, bud_key, seq_len=24, transform=None):
+        self.cli_locs = cli_locs
+        self.cli_df_list = {}
+        self.res_df_list = {}
+
+        n_cli_loc = len(cli_locs)
+        for cli_loc in cli_locs:
+            self.cli_df_list[cli_loc] = read_climate_file(Path(cli_dir) / f'{cli_loc}.cli')
+            self.res_df_list[cli_loc] = normalize_load(read_result_file(
+                res_dir / cli_loc / f'{cli_loc}_TH.out'), h_mean, h_std, c_mean, c_std)
+
+        self.bud_df = read_building_info(bud_path)[bud_key]
+        self.n_bud = len(self.bud_df)
+        self.bud_ind = self.bud_df.index.to_numpy()
+        
+        self.seq_len = seq_len
+        self.n_cli_sam = 8760 - seq_len + 1 # default step = 1
+        self.transform = transform
+        self.index = np.array([
+            np.repeat(range(n_cli_loc), self.n_bud * self.n_cli_sam), # first dim: which climate file to use
+            np.tile(np.tile(self.bud_ind, self.n_cli_sam), n_cli_loc), # second dim: building id index
+            np.tile(np.repeat(range(self.n_cli_sam), self.n_bud), n_cli_loc), # third dim: time index
+        ]).T
+
+    def __len__(self):
+        return self.n_cli_sam * self.n_bud * len(self.cli_df_list)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        if type(idx) == int:
+            idx = [idx]
+        batch_i = self.index[idx] # (bz, 3)
+
+        input = []
+        res = []
+        for loc_i, bud_i, time_i in batch_i:
+            sin_bud = self.bud_df.loc[bud_i].to_numpy()
+            sin_bud = np.repeat(np.expand_dims(sin_bud, axis=0), self.seq_len, axis=0)  # (in_len, b_dim)
+            sin_cli = self.cli_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i+self.seq_len].to_numpy() # (in_len, c_dim)
+            sin_res = self.res_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i+self.seq_len, (bud_i-5)*2: (bud_i-5)*2+2].to_numpy() # (in_len, 2)
+            sin_input = np.concatenate([sin_bud, sin_cli], axis=1) # (in_len, b_dim+c_dim)
+            input.append(sin_input)
+            res.append(sin_res)
+
+        input = torch.from_numpy(np.array(input))
+        res = torch.from_numpy(np.array(res))
+        return input, res
+
+
 class CitySimDataModule(L.LightningDataModule):
     """
     CitySimDataModule
     """
 
     def __init__(self, batch_size=64, cli_dir='./new_cli/citydnn',
-                 cli_loc='Portland_OR-hour', res_dir='./data/citydnn',
+                 cli_split_file='src/climate_split.yaml', res_dir='./data/citydnn',
                  building_path='./data/ut_building_info.csv', input_ts=1, output_ts=1, mode='rnn'):
         super().__init__()
         self.batch_size = batch_size
-        self.cli_file = Path(cli_dir) / f'{cli_loc}.cli'
-        self.cli_loc = cli_loc
+        # self.cli_file = Path(cli_dir) / f'{cli_loc}.cli'
+        self.cli_dir = Path(cli_dir)
         self.res_dir = Path(res_dir)
         self.building_path = building_path
         self.bud_key = yaml.load(open('src/input_vars.yaml', 'r'),
                                  Loader=yaml.FullLoader)['BUD_PROPS']
+
+        # prepare climate location split
+        cli_split = yaml.load(open(cli_split_file, 'r'), Loader=yaml.FullLoader)
+        self.train_cli_locs = cli_split['TRAIN']
+        self.val_cli_locs = cli_split['VAL']
+        self.test_cli_locs = cli_split['TEST']
+
         self.mode = mode
 
         self.heat_key = 'Heating(Wh)'
@@ -117,37 +178,30 @@ class CitySimDataModule(L.LightningDataModule):
         return cool * self.c_std + self.c_mean
 
     def setup(self, stage=None):
-        cli_df = read_climate_file(self.cli_file)
-        res_file = self.res_dir / self.cli_loc / f'{self.cli_loc}_TH.out'
-        res_df = read_result_file(res_file)
-        res_df = normalize_load(res_df, self.h_mean, self.h_std, self.c_mean, self.c_std)
-        bud_df = read_building_info(self.building_path)
-        bud_index = bud_df.id.to_numpy()
-        cli_index = cli_df.index[:len(cli_df)-self.input_ts+1]
-        index = np.array([np.tile(bud_index, len(cli_index)),
-                         np.repeat(cli_index, len(bud_index))]).T
-        generator1 = torch.Generator().manual_seed(1340)
-        train_index, val_index, test_index = torch.utils.data.random_split(
-            index, [0.64, 0.16, 0.2], generator=generator1)
-
         if stage == 'fit' or stage is None:
-            if self.input_ts > 1:
-                self.train_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, train_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
-                self.val_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, val_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
-            else:
-                self.train_dataset = CitySimDataset(
-                    cli_df, res_df, bud_df, train_index, self.bud_key, self.transform)
-                self.val_dataset = CitySimDataset(
-                    cli_df, res_df, bud_df, val_index, self.bud_key, self.transform)
+            self.train_dataset = CSTSMultiClimateDataset(
+                self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+            self.val_dataset = CSTSMultiClimateDataset(
+                self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+            # if self.input_ts > 1:
+            #     self.train_dataset = CitySimTSDataset(
+            #         cli_df, res_df, bud_df, train_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
+            #     self.val_dataset = CitySimTSDataset(
+            #         cli_df, res_df, bud_df, val_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
+            # else:
+            #     self.train_dataset = CitySimDataset(
+            #         cli_df, res_df, bud_df, train_index, self.bud_key, self.transform)
+            #     self.val_dataset = CitySimDataset(
+            #         cli_df, res_df, bud_df, val_index, self.bud_key, self.transform)
         if stage == 'test' or stage is None:
-            if self.input_ts > 1:
-                self.test_dataset = CitySimTSDataset(
-                    cli_df, res_df, bud_df, test_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
-            else:
-                self.test_dataset = CitySimDataset(
-                    cli_df, res_df, bud_df, test_index, self.bud_key, self.transform)
+            self.test_dataset = CSTSMultiClimateDataset(
+                self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+            # if self.input_ts > 1:
+            #     self.test_dataset = CitySimTSDataset(
+            #         cli_df, res_df, bud_df, test_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
+            # else:
+            #     self.test_dataset = CitySimDataset(
+            #         cli_df, res_df, bud_df, test_index, self.bud_key, self.transform)
 
     def train_dataloader(self):
         return data.DataLoader(self.train_dataset, batch_size=self.batch_size,

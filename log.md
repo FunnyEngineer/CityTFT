@@ -150,3 +150,46 @@ Epoch 0:   0%|
 0         Non-trainable params
 6.1 M     Total params
 24.505    Total estimated model params size (MB)
+
+ - Sequence RNN Model (With Linear embed first)
+
+  | Name             | Type       | Params
+------------------------------------------------
+0 | encoder          | LSTM       | 1.1 M 
+1 | heat_decoder     | Sequential | 33.3 K
+2 | cool_decoder     | Sequential | 33.3 K
+3 | heat_decoder_seq | LSTM       | 1.1 M 
+4 | cool_decoder_seq | LSTM       | 1.1 M 
+5 | linear_embed     | Linear     | 6.7 K 
+------------------------------------------------
+3.2 M     Trainable params
+0         Non-trainable params
+3.2 M     Total params
+12.925    Total estimated model params size (MB)
+
+
+## 2023.09.19
+
+- Climate zone definiation
+Tropical (A): This category includes hot and humid climates found near the equator, such as tropical rainforests (Af) and tropical savannas (Aw).
+
+Arid (B): Arid climates are characterized by low precipitation levels and include desert climates (BWh and BWk).
+
+Temperate (C): Temperate climates have distinct seasons and are further subdivided into subcategories like humid subtropical (Cfa), Mediterranean (Csa and Csb), and marine west coast (Cfb and Cfc) climates.
+
+Polar (D): Polar climates are cold year-round and include tundra (ET) and ice cap (EF) climates.
+
+Highland (H): Highland or mountain climates vary depending on elevation and local geography.
+
+- Starting multiploe climate file training
+
+Training (14) + Validation (3) + Test (4) = Total climate zone
+
+We have 13 C + 6 A + 2 B
+
+Final Decide to
+    |   Train   |  Val  |  Test  
+------------------------------------------
+C   |     9     |   2   |   2     
+A   |     4     |   1   |   1     
+B   |     1     |   0   |   1     

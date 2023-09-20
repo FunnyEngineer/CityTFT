@@ -8,6 +8,8 @@ export/**
 *.out
 *.err
 lightning_logs/**
+multi_cli_log/**
+bud_cls/**
 CitySim-Solver/**
 .vscode/**
 **/*.pyc

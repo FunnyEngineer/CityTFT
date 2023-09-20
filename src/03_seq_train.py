@@ -2,7 +2,7 @@ from darts.models.forecasting.tft_model import TFTModel
 import argparse
 from dataset.dataset import CitySimDataModule
 from dataset.tft_dataset import CitySimTFTDataModule
-from model.model import Net, RNNSeqNet, TransformerSeqNet, HybridRNNAttenNet, TransNetV2
+from model.model import Net, RNNSeqNet, RNNEmbedNet, TransformerSeqNet, HybridRNNAttenNet, TransNetV2
 from model.model_tft import TemporalFusionTransformer
 from configuration import CONFIGS
 
@@ -39,7 +39,7 @@ def setting_logger():
 
 
 def RNN_train():
-    logger = TensorBoardLogger('', version='rnn_seq_v1')
+    logger = TensorBoardLogger('', version='rnn_seq_with_embed_v2')
 
     save_best, save_last = setting_logger()
     # train the model
@@ -51,7 +51,8 @@ def RNN_train():
     dm.setup(stage='fit')
 
     # init model
-    model = RNNSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
+    # model = RNNSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
+    model = RNNEmbedNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
 
     # train the model
     trainer.fit(model, datamodule=dm)
@@ -111,9 +112,9 @@ def TFT_train(args):
 
 
 def main(args):
-    # RNN_train()
+    RNN_train()
     # TFT_train(args)
-    Trans_train()
+    # Trans_train()
 
 
 if __name__ == '__main__':

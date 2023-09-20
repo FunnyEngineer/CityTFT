@@ -1,0 +1,34 @@
+TRAIN:
+  # climate zone A 
+  - 'West_Palmbeach_Airp_-hour'
+  - 'Key_West_FL-hour'
+  - 'Ocotal-hour'
+  - 'Penang_Bayan_L_-hour'
+  # climate zone B
+  - 'Matamoros_Intl-hour'
+  # climate zone C
+  - 'Jacksonville_Airp_FL-hour'
+  - 'Marseille-hour'
+  - 'Portland_OR-hour'
+  - 'Reykjavik-hour'
+  - 'Bogota_El-dorado-hour'
+  - 'Tunis-hour'
+  - 'Kinloss-hour'
+  - 'Medford_Jackson_Co_-hour'
+  - 'Mobile_AL-hour'
+
+VAL:
+  # climate zone A
+  - 'Colombo-hour'
+  # climate zone C
+  - 'Dublin_Airport-hour'
+  - 'Victoria_Airp_TX-hour'
+
+TEST:
+  # climate zone A
+  - 'Kota_Bahru-hour'
+  # climate zone B
+  - 'Tucson_AZ-hour'
+  # climate zone C
+  - 'Redding_CA-hour'
+  - 'Sacramento_Airp_CA-hour'

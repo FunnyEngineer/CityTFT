@@ -191,9 +191,10 @@ class TransformerSeqNet(RNNSeqNet):
         heat_hat = self.heat_decoder(heat_hat_seq)
         cool_hat = self.cool_decoder(cool_hat_seq)
         return heat_hat, cool_hat
-    
+
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-4)
+
 
 class TransNetV2(TransformerSeqNet):
     def __init__(self, input_dim, input_ts, output_ts):
@@ -208,7 +209,6 @@ class TransNetV2(TransformerSeqNet):
         encoder_norm = nn.LayerNorm(256)
         self.encoder = nn.TransformerEncoder(
             encoder_layer, self.num_encoder_layers, encoder_norm)
-
 
         decoder_layer = nn.TransformerEncoderLayer(
             d_model=256, nhead=8, batch_first=True)
@@ -238,10 +238,10 @@ class TransNetV2(TransformerSeqNet):
         heat_hat = self.heat_decoder(heat_hat_seq)
         cool_hat = self.cool_decoder(cool_hat_seq)
         return heat_hat, cool_hat
-    
+
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=1e-3)
-    
+
 
 class HybridRNNAttenNet(RNNSeqNet):
     def __init__(self, input_dim, input_ts, output_ts):
@@ -257,13 +257,25 @@ class HybridRNNAttenNet(RNNSeqNet):
             encoder_layer, self.num_encoder_layers, encoder_norm)
         # self.encoder = nn.Transformer(d_model=256, num_decoder_layers=2, num_encoder_layers=2, dim_feedforward=256, batch_first=True)
 
-
     def forward(self, x):
         embed_x = self.linear_embed(x)
         z = self.encoder(embed_x)
-        pdb.set_trace()
         heat_hat_seq, _ = self.heat_decoder_seq(z)
         cool_hat_seq, _ = self.cool_decoder_seq(z)
         heat_hat = self.heat_decoder(heat_hat_seq)
         cool_hat = self.cool_decoder(cool_hat_seq)
         return heat_hat, cool_hat
+
+
+class RNNEmbedNet(RNNSeqNet):
+    def __init__(self, input_dim, input_ts, output_ts):
+        super().__init__(input_dim, input_ts, output_ts)
+        self.linear_embed = nn.Linear(25, 256)
+        self.encoder = nn.LSTM(input_size=256,
+                               hidden_size=256,
+                               num_layers=2,
+                               batch_first=True)
+        self.save_hyperparameters()
+
+    def forward(self, x):
+        return super().forward(self.linear_embed(x))
