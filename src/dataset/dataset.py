@@ -8,6 +8,8 @@ import yaml
 from pathlib import Path
 from utils.misc import *
 
+from typing import Callable, Dict, Optional, Tuple, Type, Union
+
 # global mean and std
 h_mean = 124264.10207582312
 h_std = 209963.99301021238
@@ -88,6 +90,7 @@ class CSTSMultiClimateDataset(data.Dataset):
         self.res_df_list = {}
 
         n_cli_loc = len(cli_locs)
+        self.n_cli_loc = n_cli_loc
         for cli_loc in cli_locs:
             self.cli_df_list[cli_loc] = read_climate_file(Path(cli_dir) / f'{cli_loc}.cli')
             self.res_df_list[cli_loc] = normalize_load(read_result_file(
@@ -96,40 +99,54 @@ class CSTSMultiClimateDataset(data.Dataset):
         self.bud_df = read_building_info(bud_path)[bud_key]
         self.n_bud = len(self.bud_df)
         self.bud_ind = self.bud_df.index.to_numpy()
-        
+
         self.seq_len = seq_len
-        self.n_cli_sam = 8760 - seq_len + 1 # default step = 1
+        self.step = 12
+        self.n_cli_sam = (8760 - seq_len) // self.step + 1  # default step = 1
         self.transform = transform
-        self.index = np.array([
-            np.repeat(range(n_cli_loc), self.n_bud * self.n_cli_sam), # first dim: which climate file to use
-            np.tile(np.tile(self.bud_ind, self.n_cli_sam), n_cli_loc), # second dim: building id index
-            np.tile(np.repeat(range(self.n_cli_sam), self.n_bud), n_cli_loc), # third dim: time index
-        ]).T
 
     def __len__(self):
-        return self.n_cli_sam * self.n_bud * len(self.cli_df_list)
+        return self.n_cli_sam * self.n_bud * self.n_cli_loc
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         if type(idx) == int:
             idx = [idx]
-        batch_i = self.index[idx] # (bz, 3)
 
         input = []
         res = []
-        for loc_i, bud_i, time_i in batch_i:
+        for i in idx:
+            loc_i = i // (self.n_bud * self.n_cli_sam)
+            bud_i = (i % (self.n_bud * self.n_cli_sam) % self.n_bud) + 5
+            time_i = (i % (self.n_bud * self.n_cli_sam) // self.n_bud) * self.step
             sin_bud = self.bud_df.loc[bud_i].to_numpy()
-            sin_bud = np.repeat(np.expand_dims(sin_bud, axis=0), self.seq_len, axis=0)  # (in_len, b_dim)
-            sin_cli = self.cli_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i+self.seq_len].to_numpy() # (in_len, c_dim)
-            sin_res = self.res_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i+self.seq_len, (bud_i-5)*2: (bud_i-5)*2+2].to_numpy() # (in_len, 2)
-            sin_input = np.concatenate([sin_bud, sin_cli], axis=1) # (in_len, b_dim+c_dim)
+            sin_bud = np.repeat(np.expand_dims(sin_bud, axis=0),
+                                self.seq_len, axis=0)  # (in_len, b_dim)
+            sin_cli = self.cli_df_list[self.cli_locs[loc_i]
+                                       ].iloc[time_i:time_i+self.seq_len].to_numpy()  # (in_len, c_dim)
+            sin_res = self.res_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i +
+                                                                  self.seq_len, (bud_i-5)*2: (bud_i-5)*2+2].to_numpy()  # (in_len, 2)
+            if np.isnan(sin_res).any():
+                continue
+            sin_input = np.concatenate([sin_bud, sin_cli], axis=1)  # (in_len, b_dim+c_dim)
             input.append(sin_input)
             res.append(sin_res)
 
         input = torch.from_numpy(np.array(input))
         res = torch.from_numpy(np.array(res))
         return input, res
+
+
+def collate_tensor_fn(batch, *, collate_fn_map: Optional[Dict[Union[Type, Tuple[Type, ...]], Callable]] = None):
+    inp = []
+    label = []
+    for s_inp, s_label in batch:
+        if s_inp.nelement() == 0:
+            continue
+        inp.append(s_inp)
+        label.append(s_label)
+    return torch.stack(inp, 0), torch.stack(label, 0)
 
 
 class CitySimDataModule(L.LightningDataModule):
@@ -204,20 +221,16 @@ class CitySimDataModule(L.LightningDataModule):
             #         cli_df, res_df, bud_df, test_index, self.bud_key, self.transform)
 
     def train_dataloader(self):
-        return data.DataLoader(self.train_dataset, batch_size=self.batch_size,
-                               num_workers=20)
+        return data.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_tensor_fn, num_workers=12)
 
     def val_dataloader(self):
-        return data.DataLoader(self.val_dataset, batch_size=self.batch_size,
-                               num_workers=20)
+        return data.DataLoader(self.val_dataset, batch_size=self.batch_size, collate_fn=collate_tensor_fn, num_workers=12)
 
     def test_dataloader(self):
-        return data.DataLoader(self.test_dataset, batch_size=self.batch_size,
-                               num_workers=20)
+        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=collate_tensor_fn, num_workers=12)
 
     def predict_dataloader(self):
-        return data.DataLoader(self.test_dataset, batch_size=self.batch_size,
-                               num_workers=20)
+        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=collate_tensor_fn, num_workers=12)
 
 
 # dataset for darts and TFT model

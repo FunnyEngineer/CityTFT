@@ -8,7 +8,7 @@ def read_climate_file(file_path):
     return cli
 
 def read_result_file(file_path):
-    res = pd.read_csv(file_path, sep='\t').dropna(axis=1, how='any')
+    res = pd.read_csv(file_path, sep='\t') # .dropna(axis=1, how='any')
     res = res.loc[:, (res.columns.str.contains('Heating')| res.columns.str.contains('Cooling'))]
     return res
 

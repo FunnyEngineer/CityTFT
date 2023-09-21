@@ -11,7 +11,7 @@ import lightning as L
 from lightning.pytorch.loggers import TensorBoardLogger
 import torch
 torch.set_float32_matmul_precision('highest')
-
+L.seed_everything(1340)
 
 training_version = 'rnn_seq_v0'
 input_dim = 25
