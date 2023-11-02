@@ -1,4 +1,5 @@
 from matplotlib import pyplot as plt
+from utils.misc import *
 
 def plot_heat_cool(y, heat_hat, cool_hat, fig_path):
     fig, axs = plt.subplots(2, 1, figsize=(20, 10))
@@ -29,3 +30,24 @@ def plot_heat_cool_seq_batch(y, heat_hat, cool_hat, fig_path):
     plt.tight_layout()
     plt.savefig(fig_path)
     # plt.show()
+
+def plot_original_load_data(res_df):
+    fig, ax = plt.subplots()
+    heating = res_df.iloc[:, 0]
+    cooling = res_df.iloc[:, 1]
+
+    ax.bar(res_df.index, heating, color='red')
+    ax.bar(res_df.index, cooling, color='blue')
+
+    fig.patch.set_visible(False)
+    ax.axis('off')
+    plt.show()
+
+def plot_original_cli_data(cli_df):
+    fig, ax = plt.subplots()
+
+    ax.plot(cli_df.index, cli_df.iloc[:, 5], color='teal')
+
+    fig.patch.set_visible(False)
+    ax.axis('off')
+    plt.show()

@@ -33,7 +33,11 @@
 
 
 # Launch serial code...
-for FILE in $(ls ./data/climate/citydnn/*)
+for URBAN_FILE in $(ls ./data/random_urban/*)
 do
-    source main.sh -x ./data/SRLOD3.1_Annual_results.xml -c $FILE -p ./new_cli/citydnn -n ./new_xml/citydnn -e ./export/citydnn
+    for CLI_FILE in $(ls ./data/climate/citydnn/*)
+    do
+        urban_nmae=$(basename "$URBAN_FILE" .xml)
+        # source main.sh -x $URBAN_FILE -c $CLI_FILE -p ./new_cli/citydnn -n ./new_xml/citydnn -e ./export/citydnn
+    done
 done

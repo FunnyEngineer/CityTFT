@@ -2,7 +2,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pdb
-from model.model import Net, RNNSeqNet, TransformerSeqNet, TransNetV2
+from model.base import Net, RNNSeqNet, TransformerSeqNet, TransNetV2
 from dataset.dataset import CitySimDataModule
 import lightning as L
 import torch.nn as nn

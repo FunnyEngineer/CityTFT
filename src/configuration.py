@@ -16,6 +16,13 @@ from utils.data_utils import InputTypes, DataTypes, FeatureSpec
 import datetime
 
 
+
+H_MEAN = 208067.33730670897
+H_STD = 241361.16853850652
+C_MEAN = -227953.4075332571
+C_STD = 259908.86350470388
+QUANTILES = [0.1, 0.5, 0.9]
+
 class ElectricityConfig():
     def __init__(self):
 
@@ -255,7 +262,7 @@ class CitySimConfig():
             len(self.temporal_known_categorical_inp_lens)
         self.num_historic_vars = sum([self.num_future_vars,
                                       self.temporal_observed_continuous_inp_size,
-                                      self.temporal_target_size,
+                                    #   self.temporal_target_size,
                                       len(self.temporal_observed_categorical_inp_lens),
                                       ])
 

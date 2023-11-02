@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Union
+from typing import Optional, Union, Callable, Dict, Optional, Tuple, Type, Union
 import torch.utils.data as data
 import lightning as L
 import torch
@@ -7,14 +7,14 @@ import torchvision.transforms as transforms
 import yaml
 from pathlib import Path
 from utils.misc import *
+from collections import OrderedDict
 
-from typing import Callable, Dict, Optional, Tuple, Type, Union
 
 # global mean and std
-h_mean = 124264.10207582312
-h_std = 209963.99301021238
-c_mean = -40422.87019045903
-c_std = 127541.16314976662
+h_mean = 208067.33730670897
+h_std = 241361.16853850652
+c_mean = -227953.4075332571
+c_std = 259908.86350470388
 
 
 class CitySimDataset(data.Dataset):
@@ -101,7 +101,7 @@ class CSTSMultiClimateDataset(data.Dataset):
         self.bud_ind = self.bud_df.index.to_numpy()
 
         self.seq_len = seq_len
-        self.step = 12
+        self.step = 24
         self.n_cli_sam = (8760 - seq_len) // self.step + 1  # default step = 1
         self.transform = transform
 
@@ -125,11 +125,14 @@ class CSTSMultiClimateDataset(data.Dataset):
                                 self.seq_len, axis=0)  # (in_len, b_dim)
             sin_cli = self.cli_df_list[self.cli_locs[loc_i]
                                        ].iloc[time_i:time_i+self.seq_len].to_numpy()  # (in_len, c_dim)
+            sin_ts = np.expand_dims(np.arange(time_i, time_i+self.seq_len) /
+                                    8760, axis=1)  # (in_len, 1)
             sin_res = self.res_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i +
                                                                   self.seq_len, (bud_i-5)*2: (bud_i-5)*2+2].to_numpy()  # (in_len, 2)
             if np.isnan(sin_res).any():
                 continue
-            sin_input = np.concatenate([sin_bud, sin_cli], axis=1)  # (in_len, b_dim+c_dim)
+            sin_input = np.concatenate([sin_bud, sin_cli, sin_ts],
+                                       axis=1)  # (in_len, b_dim+c_dim+1)
             input.append(sin_input)
             res.append(sin_res)
 
@@ -147,6 +150,61 @@ def collate_tensor_fn(batch, *, collate_fn_map: Optional[Dict[Union[Type, Tuple[
         inp.append(s_inp)
         label.append(s_label)
     return torch.stack(inp, 0), torch.stack(label, 0)
+
+
+FEAT_NAMES = ['s_cat', 's_cont', 'k_cat', 'k_cont', 'o_cat', 'o_cont', 'target', 'id']
+
+
+class CSTSMultiClimateTFTDataset(CSTSMultiClimateDataset):
+    def __init__(self, cli_dir, res_dir, cli_locs, bud_path, bud_key, seq_len=24, transform=None):
+        super().__init__(cli_dir, res_dir, cli_locs, bud_path, bud_key, seq_len, transform)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        if type(idx) == int:
+            idx = [idx]
+
+        bud = []
+        cli = []
+        res = []
+        for i in idx:
+            loc_i = i // (self.n_bud * self.n_cli_sam)
+            bud_i = (i % (self.n_bud * self.n_cli_sam) % self.n_bud) + 5
+            time_i = (i % (self.n_bud * self.n_cli_sam) // self.n_bud) * self.step
+            sin_bud = self.bud_df.loc[bud_i].to_numpy() # (1, b_dim)
+            sin_cli = self.cli_df_list[self.cli_locs[loc_i]
+                                       ].iloc[time_i:time_i+self.seq_len].to_numpy()  # (in_len, c_dim)
+
+            sin_res = self.res_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i +
+                                                                  self.seq_len, (bud_i-5)*2: (bud_i-5)*2+2].to_numpy()  # (in_len, 2)
+            if np.isnan(sin_res).any():
+                continue
+
+            bud.append(sin_bud)
+            cli.append(sin_cli)
+            res.append(sin_res)
+        bud = np.array(bud)  # (batch, 1, b_dim)
+        cli = np.concatenate(cli, axis=0)  if cli else np.array(cli) # (in_len, c_dim)
+        res = np.concatenate(res, axis=0)  if res else np.array(res) # (batch, out_len, 2)
+        tensors = [
+            torch.empty(0),
+            torch.from_numpy(bud).float(),
+            torch.empty(0),
+            torch.from_numpy(cli).float(),
+            torch.empty(0),
+            torch.empty(0),
+            torch.from_numpy(res).float(),
+            torch.IntTensor(idx),
+        ]
+        return OrderedDict(zip(FEAT_NAMES, tensors))
+
+
+from torch.utils.data._utils.collate import default_collate
+def collate_tft_fn(batch, *, collate_fn_map: Optional[Dict[Union[Type, Tuple[Type, ...]], Callable]] = None):
+    # filter out empty value before collate:
+    batch = [x for x in batch if x['s_cont'].nelement() != 0]
+    return default_collate(batch)
 
 
 class CitySimDataModule(L.LightningDataModule):
@@ -176,30 +234,32 @@ class CitySimDataModule(L.LightningDataModule):
 
         self.heat_key = 'Heating(Wh)'
         self.cool_key = 'Cooling(Wh)'
-        self.h_mean = 124264.10207582312
-        self.h_std = 209963.99301021238
-        self.c_mean = -40422.87019045903
-        self.c_std = 127541.16314976662
-
         self.input_ts = input_ts  # if 1, direct prediction, if >1, time series prediction
         self.output_ts = output_ts  # if 1, means predict the same time step
         self.transform = transforms.Compose([transforms.ToTensor()])
+        self.collate_fn = collate_tensor_fn if self.mode != 'tft' else collate_tft_fn
 
     def prepare_data(self):
         pass
 
     def heat_inverse_transform(self, heat):
-        return heat * self.h_std + self.h_mean
+        return heat * h_std + h_mean
 
     def cool_inverse_transform(self, cool):
-        return cool * self.c_std + self.c_mean
+        return cool * c_std + c_mean
 
     def setup(self, stage=None):
         if stage == 'fit' or stage is None:
-            self.train_dataset = CSTSMultiClimateDataset(
-                self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key, transform=self.transform)
-            self.val_dataset = CSTSMultiClimateDataset(
-                self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+            if self.mode != 'tft':
+                self.train_dataset = CSTSMultiClimateDataset(
+                    self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+                self.val_dataset = CSTSMultiClimateDataset(
+                    self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+            else:
+                self.train_dataset = CSTSMultiClimateTFTDataset(
+                    self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+                self.val_dataset = CSTSMultiClimateTFTDataset(
+                    self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key, transform=self.transform)
             # if self.input_ts > 1:
             #     self.train_dataset = CitySimTSDataset(
             #         cli_df, res_df, bud_df, train_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
@@ -211,8 +271,14 @@ class CitySimDataModule(L.LightningDataModule):
             #     self.val_dataset = CitySimDataset(
             #         cli_df, res_df, bud_df, val_index, self.bud_key, self.transform)
         if stage == 'test' or stage is None:
-            self.test_dataset = CSTSMultiClimateDataset(
-                self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+
+            if self.mode != 'tft':
+                self.test_dataset = CSTSMultiClimateDataset(
+                    self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+            else:
+                self.test_dataset = CSTSMultiClimateTFTDataset(
+                    self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+
             # if self.input_ts > 1:
             #     self.test_dataset = CitySimTSDataset(
             #         cli_df, res_df, bud_df, test_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
@@ -221,16 +287,16 @@ class CitySimDataModule(L.LightningDataModule):
             #         cli_df, res_df, bud_df, test_index, self.bud_key, self.transform)
 
     def train_dataloader(self):
-        return data.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=collate_tensor_fn, num_workers=12)
+        return data.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=self.collate_fn, num_workers=20)
 
     def val_dataloader(self):
-        return data.DataLoader(self.val_dataset, batch_size=self.batch_size, collate_fn=collate_tensor_fn, num_workers=12)
+        return data.DataLoader(self.val_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=20)
 
     def test_dataloader(self):
-        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=collate_tensor_fn, num_workers=12)
+        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=20)
 
     def predict_dataloader(self):
-        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=collate_tensor_fn, num_workers=12)
+        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=20)
 
 
 # dataset for darts and TFT model

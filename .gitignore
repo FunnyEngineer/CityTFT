@@ -9,6 +9,7 @@ export/**
 *.err
 lightning_logs/**
 multi_cli_log/**
+multi_cli/**
 bud_cls/**
 CitySim-Solver/**
 .vscode/**

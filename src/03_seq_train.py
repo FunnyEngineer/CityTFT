@@ -2,7 +2,7 @@ from darts.models.forecasting.tft_model import TFTModel
 import argparse
 from dataset.dataset import CitySimDataModule
 from dataset.tft_dataset import CitySimTFTDataModule
-from model.model import Net, RNNSeqNet, RNNEmbedNet, TransformerSeqNet, HybridRNNAttenNet, TransNetV2
+from model.base import Net, RNNSeqNet, RNNEmbedNet, TransformerSeqNet, HybridRNNAttenNet, TransNetV2
 from model.model_tft import TemporalFusionTransformer
 from configuration import CONFIGS
 
