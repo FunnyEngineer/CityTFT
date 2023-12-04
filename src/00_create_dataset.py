@@ -47,18 +47,16 @@ def main():
         
 def from_xy_to_aspect_ratio(x, y):
     edge_length = (Point(x[0], y[0]).distance(Point(x[1], y[1])), Point(x[1], y[1]).distance(Point(x[2], y[2])))
-    print(edge_length)
     return max(edge_length) / min(edge_length)
 
-def xml_to_df():
+def xml_to_df(xml_path, export_path):
 
     def attrs_list_to_numeric_filter_series(attrs_list):
         df = pd.DataFrame(attrs_list)
-        print(df)
         df = df.apply(pd.to_numeric)
         return dict(df.mean().dropna().drop(labels=['id', 'type']))
 
-    with open('data/SRLOD3.1_Annual_results.xml', 'r') as f:
+    with open(xml_path, 'r') as f:
         html = f.read()
         
     soup = BeautifulSoup(html, 'xml')
@@ -67,7 +65,6 @@ def xml_to_df():
 
     bu_attr_list = []
     for bu in building_list:
-        print('building id: ' + bu.attrs['id'] + ' is processing...')
         bu_attrs = bu.attrs # init building attrs
         
         # building level
@@ -170,8 +167,13 @@ def xml_to_df():
         bu_attr_list.append(bu_attrs)
     
     df = pd.DataFrame(bu_attr_list)
-    df.to_csv('data/ut_building_info.csv', index=False)
+    df.to_csv(export_path, index=False)
 
 if __name__ == '__main__':
     # main()
-    xml_to_df()
+    # iterate random xml files
+    xml_dir = Path('./data/random_urban')
+    file_list = xml_dir.glob('*.xml')
+    for f in file_list:
+        export_path = f.parent / (f.stem + '.csv')
+        xml_to_df(f, export_path)
