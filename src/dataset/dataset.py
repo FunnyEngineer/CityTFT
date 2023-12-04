@@ -215,22 +215,26 @@ class CSTSMCMUDataset(CSTSMultiClimateDataset):
             
         bud_path = Path(bud_path)
         bud_list = list(bud_path.glob('*.csv'))
-        n_bud = len(bud_list)
+        self.n_bud = 0
+        self.bud_df = pd.DataFrame()
         for bud_path in bud_list:
             bud_df = read_building_info(bud_path)[bud_key]
-            if bud_df.shape[0] != 1:
-                continue
+            if bud_df.shape[0] != 0:
+                self.bud_df = pd.concat([self.bud_df, bud_df])
+                self.n_bud += bud_df.shape[0]
             else:
                 break
-
-        self.bud_df = read_building_info(bud_path)[bud_key]
-        self.n_bud = len(self.bud_df)
-        self.bud_ind = self.bud_df.index.to_numpy()
 
         self.seq_len = seq_len
         self.step = 24
         self.n_cli_sam = (8760 - seq_len) // self.step + 1  # default step = 1
         self.transform = transform
+        
+        # calculate the number of samples
+        self.n_samples = n_cli_loc * self.n_bud * self.n_cli_sam
+        
+    def __len__(self):
+        return self.n_samples
 
 
     def __getitem__(self, idx):
