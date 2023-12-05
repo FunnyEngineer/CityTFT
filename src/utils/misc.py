@@ -14,6 +14,11 @@ def read_result_file(file_path):
     res = res.fillna(0) # since there is only 0.04% nan values in total, should be fine
     return res
 
+def read_result_file_csv(file_path):
+    res = pd.read_csv(file_path, index_col=0) # .dropna(axis=1, how='any')
+    res = res.fillna(0) # since there is only 0.04% nan values in total, should be fine
+    return res
+
 def normalize_load(res, h_mean, h_std, c_mean, c_std):
     res.loc[:, (res.columns.str.contains('Heating'))] = (res.loc[:, (res.columns.str.contains('Heating'))] - h_mean) / h_std
     res.loc[:, (res.columns.str.contains('Cooling'))] = (res.loc[:, (res.columns.str.contains('Cooling'))] - c_mean) / c_std

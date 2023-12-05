@@ -7,6 +7,7 @@ import torchvision.transforms as transforms
 import yaml
 from pathlib import Path
 from utils.misc import *
+from utils.concat_input import combine_res_bud_cli
 from collections import OrderedDict
 
 
@@ -208,22 +209,18 @@ class CSTSMCMUDataset(CSTSMultiClimateDataset):
 
         n_cli_loc = len(cli_locs)
         self.n_cli_loc = n_cli_loc
-        for cli_loc in cli_locs:
-            self.cli_df_list[cli_loc] = read_climate_file(Path(cli_dir) / f'{cli_loc}.cli')
-            self.res_df_list[cli_loc] = normalize_load(read_result_file(
-                res_dir / cli_loc / f'{cli_loc}_TH.out'), h_mean, h_std, c_mean, c_std)
-            
+
         bud_path = Path(bud_path)
         bud_list = list(bud_path.glob('*.csv'))
         self.n_bud = 0
-        self.bud_df = pd.DataFrame()
+        self.df = pd.DataFrame()
         for bud_path in bud_list:
-            bud_df = read_building_info(bud_path)[bud_key]
-            if bud_df.shape[0] != 0:
-                self.bud_df = pd.concat([self.bud_df, bud_df])
-                self.n_bud += bud_df.shape[0]
-            else:
-                break
+            for cli_loc in cli_locs:
+                print(f'Processing {bud_path.stem} {cli_loc}')
+                res_path = res_dir / bud_path.stem / f'{cli_loc}.csv'
+                cli_path = cli_dir / f'{cli_loc}.cli'
+                self.df = pd.concat([self.df, combine_res_bud_cli(cli_path, res_path, bud_path)])
+        self.df = self.df.reset_index(drop=True)
 
         self.seq_len = seq_len
         self.step = 24
@@ -243,39 +240,7 @@ class CSTSMCMUDataset(CSTSMultiClimateDataset):
         if type(idx) == int:
             idx = [idx]
 
-        bud = []
-        cli = []
-        res = []
-        for i in idx:
-            loc_i = i // (self.n_bud * self.n_cli_sam)
-            bud_i = (i % (self.n_bud * self.n_cli_sam) % self.n_bud) + 5
-            time_i = (i % (self.n_bud * self.n_cli_sam) // self.n_bud) * self.step
-            sin_bud = self.bud_df.loc[bud_i].to_numpy() # (1, b_dim)
-            sin_cli = self.cli_df_list[self.cli_locs[loc_i]
-                                       ].iloc[time_i:time_i+self.seq_len].to_numpy()  # (in_len, c_dim)
-
-            sin_res = self.res_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i +
-                                                                  self.seq_len, (bud_i-5)*2: (bud_i-5)*2+2].to_numpy()  # (in_len, 2)
-            if np.isnan(sin_res).any():
-                continue
-
-            bud.append(sin_bud)
-            cli.append(sin_cli)
-            res.append(sin_res)
-        bud = np.array(bud)  # (batch, 1, b_dim)
-        cli = np.concatenate(cli, axis=0)  if cli else np.array(cli) # (in_len, c_dim)
-        res = np.concatenate(res, axis=0)  if res else np.array(res) # (batch, out_len, 2)
-        tensors = [
-            torch.empty(0),
-            torch.from_numpy(bud).float(),
-            torch.empty(0),
-            torch.from_numpy(cli).float(),
-            torch.empty(0),
-            torch.empty(0),
-            torch.from_numpy(res).float(),
-            torch.IntTensor(idx),
-        ]
-        return OrderedDict(zip(FEAT_NAMES, tensors))
+        return self.transform(self.df.iloc[idx, :-2].to_numpy()), self.df.iloc[idx, -2:].to_numpy()
 
 from torch.utils.data._utils.collate import default_collate
 def collate_tft_fn(batch, *, collate_fn_map: Optional[Dict[Union[Type, Tuple[Type, ...]], Callable]] = None):
@@ -291,7 +256,7 @@ class CitySimDataModule(L.LightningDataModule):
 
     def __init__(self, batch_size=64, cli_dir='./new_cli/citydnn',
                  cli_split_file='src/climate_split.yaml', res_dir='./data/citydnn',
-                 building_path='./data/ut_building_info.csv', input_ts=1, output_ts=1, mode='rnn', multi_urban=True):
+                 building_path='./data/ut_building_info.csv', input_ts=1, output_ts=1, mode='rnn'):
         super().__init__()
         self.batch_size = batch_size
         # self.cli_file = Path(cli_dir) / f'{cli_loc}.cli'
@@ -375,31 +340,18 @@ class CitySimDataModule(L.LightningDataModule):
     def predict_dataloader(self):
         return data.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=20)
 
-class CitySimDataModuleMultiUrban(CitySimDataModule):
-
-
+class MultiUrbanCitySim(CitySimDataModule):
     def __init__(self, batch_size=64, cli_dir='./new_cli/citydnn',
                  cli_split_file='src/climate_split.yaml', res_dir='./data/random_urban/export_csv',
-                 building_dir='./data/random_urban', input_ts=24, output_ts=24, mode='rnn'):
-        super().__init__()
-        self.batch_size = batch_size
-        self.cli_dir = Path(cli_dir)
-        self.res_dir = Path(res_dir)
-        self.building_dir = Path(building_dir)
-        self.bud_key = yaml.load(open('src/input_vars.yaml', 'r'),
-                                 Loader=yaml.FullLoader)['BUD_PROPS']
+                 building_path='./data/random_urban', input_ts=24, output_ts=24, mode='rnn'):
+        super().__init__(batch_size, cli_dir, cli_split_file, res_dir, building_path, input_ts, output_ts, mode)
 
-        # prepare climate location split
-        cli_split = yaml.load(open(cli_split_file, 'r'), Loader=yaml.FullLoader)
-        self.train_cli_locs = cli_split['TRAIN']
-        self.val_cli_locs = cli_split['VAL']
-        self.test_cli_locs = cli_split['TEST']
-
-        self.mode = mode
-
-        self.heat_key = 'Heating(Wh)'
-        self.cool_key = 'Cooling(Wh)'
-        self.input_ts = input_ts  # if 1, direct prediction, if >1, time series prediction
-        self.output_ts = output_ts  # if 1, means predict the same time step
-        self.transform = transforms.Compose([transforms.ToTensor()])
-        self.collate_fn = collate_tensor_fn if self.mode != 'tft' else collate_tft_fn
+    def setup(self, stage=None):
+        if stage == 'fit' or stage is None:
+            self.train_dataset = CSTSMCMUDataset(
+                self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+            self.val_dataset = CSTSMCMUDataset(
+                self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+        if stage == 'test' or stage is None:
+            self.test_dataset = CSTSMCMUDataset(
+                self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key, transform=self.transform)
