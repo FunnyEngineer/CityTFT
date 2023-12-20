@@ -98,9 +98,9 @@ class RNNSeqNetV2(RNNSeqNet):
         self.cool_decoder = nn.Sequential(
             nn.Linear(hidden_dim, half_dim), PermuteSeq(), nn.BatchNorm1d(half_dim), PermuteSeq(), nn.ReLU(), nn.Linear(half_dim, len(self.quantiles)))
         self.heat_tigger = nn.Sequential(
-            nn.Linear(hidden_dim, half_dim), PermuteSeq(), nn.BatchNorm1d(half_dim), PermuteSeq(), nn.ReLU(), nn.Linear(half_dim, 1), nn.Sigmoid())
+            nn.Linear(hidden_dim, half_dim), PermuteSeq(), nn.BatchNorm1d(half_dim), PermuteSeq(), nn.ReLU(), nn.Linear(half_dim, 1))
         self.cool_trigger = nn.Sequential(
-            nn.Linear(hidden_dim, half_dim), PermuteSeq(), nn.BatchNorm1d(half_dim), PermuteSeq(), nn.ReLU(), nn.Linear(half_dim, 1), nn.Sigmoid())
+            nn.Linear(hidden_dim, half_dim), PermuteSeq(), nn.BatchNorm1d(half_dim), PermuteSeq(), nn.ReLU(), nn.Linear(half_dim, 1))
 
     def forward(self, x):
         z, encode_hidden = self.encoder(x)
@@ -115,8 +115,8 @@ class RNNSeqNetV2(RNNSeqNet):
     def criterion(self, heat_hat, cool_hat, heat_prob, cool_prob, y, threshold=0.5):
         h_mask = (y[:, :, 0] != self.h_zero)
         c_mask = (y[:, :, 1] != self.c_zero)
-        heat_prob_loss = nn.functional.binary_cross_entropy(heat_prob, h_mask.unsqueeze(2).float())
-        cool_prob_loss = nn.functional.binary_cross_entropy(cool_prob, c_mask.unsqueeze(2).float())
+        heat_prob_loss = nn.functional.binary_cross_entropy_with_logits(heat_prob, h_mask.unsqueeze(2).float())
+        cool_prob_loss = nn.functional.binary_cross_entropy_with_logits(cool_prob, c_mask.unsqueeze(2).float())
         heat_loss = self.quantile_loss(heat_hat[h_mask], y[:, :, 0].unsqueeze(2)[h_mask]).sum()
         cool_loss = self.quantile_loss(cool_hat[c_mask], y[:, :, 1].unsqueeze(2)[c_mask]).sum()
         return heat_loss, cool_loss, heat_prob_loss, cool_prob_loss
