@@ -1,21 +1,21 @@
 import pandas as pd
+import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
-import pdb
 from pickle import load
 
 def read_climate_file(file_path):
-    cli = pd.read_csv(file_path, sep='\t', skiprows=6)
+    cli = pd.read_csv(file_path, sep='\t', skiprows=6, dtype=np.float16)
     cli, _ = scaling_df(cli, type='cli')
     return cli
 
 def read_result_file(file_path):
-    res = pd.read_csv(file_path, sep='\t') # .dropna(axis=1, how='any')
+    res = pd.read_csv(file_path, sep='\t', dtype=np.float32) # .dropna(axis=1, how='any')
     res = res.loc[:, (res.columns.str.contains('Heating')| res.columns.str.contains('Cooling'))]
     res = res.fillna(0) # since there is only 0.04% nan values in total, should be fine
     return res
 
 def read_result_file_csv(file_path):
-    res = pd.read_csv(file_path, index_col=0) # .dropna(axis=1, how='any')
+    res = pd.read_csv(file_path, index_col=0, dtype=np.float32) # .dropna(axis=1, how='any')
     res = res.fillna(0) # since there is only 0.04% nan values in total, should be fine
     return res
 
@@ -32,7 +32,7 @@ def read_building_info(file_path):
 
 def scaling_df(df, start_col = 0, type = 'cli'):
     if type == 'cli':
-        scaler = load(open('data/citydnn_climate_scaler.pkl', 'rb'))
+        scaler = load(open('/work/08388/tudai/ls6/US_cities/climate_scaler.pkl', 'rb'))
     else:
         scaler = MinMaxScaler()
     try:

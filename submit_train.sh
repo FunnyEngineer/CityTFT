@@ -1,3 +1,5 @@
+#!/bin/bash
+#----------------------------------------------------
 # Sample Slurm job script
 #   for TACC Lonestar6 AMD Milan nodes
 #
@@ -22,16 +24,17 @@
 #SBATCH -J CityTFT           # Job name
 #SBATCH -o CityTFT.out       # Name of stdout output file
 #SBATCH -e CityTFT.err       # Name of stderr error file
-#SBATCH -p gpu-a100          # Queue (partition) name
+#SBATCH -p gpu-a100-small          # Queue (partition) name
 #SBATCH -N 1               # Total # of nodes (must be 1 for serial)
 #SBATCH -n 1               # Total # of mpi tasks (should be 1 for serial)
+#SBATCH -A MSS23005
 #SBATCH -t 48:00:00        # Run time (hh:mm:ss)
 #SBATCH --mail-type=all    # Send email at begin and end of job
 #SBATCH --mail-user=funnyengineer@utexas.edu
 
 # Any other commands must follow all #SBATCH directives...
-module load cuda/11.4 cudnn/8.2.4 nccl/2.11.4
+# module load cuda/12.0 cudnn/8.8.1 nccl/2.11.4
 source /work/08388/tudai/ls6/envs/mae/bin/activate
 
 # Launch serial code...
-python3 main_aod_pretrain.py --batch_size 1 --input_size 64
+python3 src/12_multi_urban_train.py

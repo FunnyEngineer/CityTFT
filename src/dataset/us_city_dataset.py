@@ -51,9 +51,9 @@ class USCity(data.Dataset):
         self.n_timestamp = (
             (self.total_length - self.ts_length) // self.time_step + 1)
 
-        self.setup(ref_csv, bud_dir, cli_dir, res_dir)
+        self.setup(ref_csv, bud_dir, cli_dir, res_dir, bud_key)
 
-    def setup(self, ref_csv, bud_dir, cli_dir, res_dir):
+    def setup(self, ref_csv, bud_dir, cli_dir, res_dir, bud_key):
         ref = pd.read_csv(ref_csv)
         ref = ref.sort_values(by=['city'], ignore_index=True)
         # record the number of cities
@@ -65,14 +65,14 @@ class USCity(data.Dataset):
 
             bud_file_name = row['bud']
             bud_path = list(bud_dir.glob(f'**/{bud_file_name}'))[0]
-            bud_df = read_building_info(bud_path)
+            bud_df = read_building_info(bud_path)[bud_key].astype(np.float16)
 
             res_file_name = row['result']
             res_path = list(res_dir.glob(f'**/{res_file_name}'))[0]
             res_df = read_result_file(res_path)
 
             # normalize the load
-            res_df = normalize_load(res_df, h_mean, h_std, c_mean, c_std)
+            res_df = normalize_load(res_df, h_mean, h_std, c_mean, c_std).astype(np.float16)
             self.index_buds = np.append(self.index_buds, range(len(bud_df)))
             self.index_city = np.append(
                 self.index_city, np.repeat(i, len(bud_df)))
@@ -114,8 +114,8 @@ class USCityDataModule(L.LightningDataModule):
     USCityDataModule
     """
 
-    def __init__(self, input_ts, batch_size=64, cli_dir='../US_cities/climate/historic', res_dir='../US_cities/result',
-                 bud_dir='../US_cities/bud', ref_csv='../US_cities/ref.csv', mode='rnn'):
+    def __init__(self, input_ts, batch_size=64, cli_dir='/work/08388/tudai/ls6/US_cities/climate/historic', res_dir='/work/08388/tudai/ls6/US_cities/result',
+                 bud_dir='/work/08388/tudai/ls6/US_cities/bud', ref_csv='/work/08388/tudai/ls6/US_cities/ref.csv', mode='rnn'):
         super().__init__()
         self.intput_ts = input_ts
         self.batch_size = batch_size
@@ -149,7 +149,7 @@ class USCityDataModule(L.LightningDataModule):
         )
 
     def train_dataloader(self):
-        return data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, collate_fn=self.collate_fn, num_workers=16)
+        return data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, collate_fn=self.collate_fn)
 
     def val_dataloader(self):
         return data.DataLoader(self.val, batch_size=self.batch_size, collate_fn=self.collate_fn)
