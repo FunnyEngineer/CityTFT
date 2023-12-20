@@ -2,7 +2,7 @@ from typing import Any
 import torch
 import torch.nn as nn
 from model.base import RNNNet, PermuteSeq
-from configuration import H_MEAN, C_MEAN, H_STD, C_STD, QUANTILES
+from configs.configuration import H_MEAN, C_MEAN, H_STD, C_STD, QUANTILES
 from utils.criterions import QuantileLoss
 import pdb
 

@@ -4,7 +4,7 @@ from model.base import Net
 from model.rnn import RNNSeqNetV2
 from model.transformer import TransNetV2
 from model.model_tft import TemporalFusionTransformer
-from configuration import CONFIGS
+from configs.configuration import CONFIGS
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 import lightning as L

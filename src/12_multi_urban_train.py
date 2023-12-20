@@ -1,10 +1,11 @@
-import argparse
+import os
 from dataset.us_city_dataset import USCityDataModule
 from model.base import Net
 from model.rnn import RNNSeqNetV2
 from model.transformer import TransNetV2
 from model.model_tft import TemporalFusionTransformer
-from configuration import CONFIGS
+from configs.configuration import CONFIGS
+from configs.train_config import TRAIN_CONFIGS
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 import lightning as L
@@ -15,6 +16,7 @@ L.seed_everything(1340)
 
 input_dim = 26
 input_seq_len = 24
+
 
 def setting_logger():
     # store the best model and the last model
@@ -35,23 +37,27 @@ def setting_logger():
     )
     return save_best, save_last
 
-def train():
-    logger = TensorBoardLogger('', name='us_city', version='rnn_v2_hidden32_dropout8e-1')
+
+def train(config):
+    logger = TensorBoardLogger(
+        '', name='us_city', version='rnn_v2_hidden32_dropout8e-1')
 
     save_best, save_last = setting_logger()
     # train the model
-    trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1,
-                        callbacks=[save_last, save_best])
+    trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1, precision=config.precision,
+                        accelerator='gpu', devices=config.devices, callbacks=[save_last, save_best])
 
     # init datamodule
-    dm = USCityDataModule(input_ts=input_seq_len)
+    dm = USCityDataModule(input_ts=input_seq_len, cli_dir=config.cli_dir, res_dir=config.res_dir,
+                          bud_dir=config.bud_dir, ref_csv=config.ref_csv, num_workers=config.num_workers)
     dm.setup()
 
     # init model
     # model = RNNSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
     # model = RNNEmbedNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
     # model = TransNetV2(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
-    model = RNNSeqNetV2(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len, hidden_dim=32, dropout=0.8)
+    model = RNNSeqNetV2(input_dim=input_dim, input_ts=input_seq_len,
+                        output_ts=input_seq_len, hidden_dim=32, dropout=0.8)
 
     # train the model
     trainer.fit(model, datamodule=dm)
@@ -59,6 +65,12 @@ def train():
     # test the model
     trainer.test(model, datamodule=dm)
 
+
 if __name__ == '__main__':
+    host_name = os.popen('hostname').read().strip()
+    if 'tacc' in host_name:
+        config = TRAIN_CONFIGS['tacc']
+    else:
+        config = TRAIN_CONFIGS['local']
     # normal train
-    train()
+    train(config)

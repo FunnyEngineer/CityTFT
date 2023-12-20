@@ -4,7 +4,7 @@ from dataset.dataset import CitySimDataModule
 from dataset.tft_dataset import CitySimTFTDataModule
 from model.base import Net, RNNSeqNet, RNNEmbedNet, TransformerSeqNet, HybridRNNAttenNet, TransNetV2
 from model.model_tft import TemporalFusionTransformer
-from configuration import CONFIGS
+from configs.configuration import CONFIGS
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 import lightning as L

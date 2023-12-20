@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from configuration import H_MEAN, H_STD, C_MEAN, C_STD
+from configs.configuration import H_MEAN, H_STD, C_MEAN, C_STD
 from utils.criterions import QuantileLoss
 import lightning as L
 from torch.nn import LayerNorm

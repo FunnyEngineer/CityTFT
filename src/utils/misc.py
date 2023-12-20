@@ -2,6 +2,13 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from pickle import load
+import os
+from configs.train_config import TRAIN_CONFIGS
+host_name = os.popen('hostname').read().strip()
+if 'tacc' in host_name:
+    config = TRAIN_CONFIGS['tacc']
+else:
+    config = TRAIN_CONFIGS['local']
 
 def read_climate_file(file_path):
     cli = pd.read_csv(file_path, sep='\t', skiprows=6, dtype=np.float16)
@@ -32,7 +39,7 @@ def read_building_info(file_path):
 
 def scaling_df(df, start_col = 0, type = 'cli'):
     if type == 'cli':
-        scaler = load(open('/work/08388/tudai/ls6/US_cities/climate_scaler.pkl', 'rb'))
+        scaler = load(open(config.cli_scaler, 'rb'))
     else:
         scaler = MinMaxScaler()
     try:

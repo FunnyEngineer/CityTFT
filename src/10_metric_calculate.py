@@ -8,7 +8,7 @@ import torch
 import pickle
 
 from model.model_tft import TemporalFusionTransformer
-from configuration import CONFIGS
+from configs.configuration import CONFIGS
 
 input_dim = 26
 input_seq_len = 24
