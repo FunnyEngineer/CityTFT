@@ -1,5 +1,5 @@
 import argparse
-from dataset.dataset import MultiUrbanCitySim
+from dataset.us_city_dataset import USCityDataModule
 from model.base import Net
 from model.rnn import RNNSeqNetV2
 from model.transformer import TransNetV2
@@ -36,7 +36,7 @@ def setting_logger():
     return save_best, save_last
 
 def train():
-    logger = TensorBoardLogger('', name='multi_urban', version='rnn_v2_hidden32_dropout8e-1')
+    logger = TensorBoardLogger('', name='us_city', version='rnn_v2_hidden32_dropout8e-1')
 
     save_best, save_last = setting_logger()
     # train the model
@@ -44,8 +44,8 @@ def train():
                         callbacks=[save_last, save_best])
 
     # init datamodule
-    dm = MultiUrbanCitySim(input_ts=input_seq_len, output_ts=input_seq_len)
-    dm.setup(stage='fit')
+    dm = USCityDataModule(input_ts=input_seq_len)
+    dm.setup()
 
     # init model
     # model = RNNSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
@@ -55,7 +55,6 @@ def train():
 
     # train the model
     trainer.fit(model, datamodule=dm)
-    dm.setup(stage='test')
 
     # test the model
     trainer.test(model, datamodule=dm)
