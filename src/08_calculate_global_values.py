@@ -6,7 +6,6 @@ from utils.misc import scaling_df, read_result_file
 import pdb
 from pickle import dump
 import matplotlib.pyplot as plt
-from configs.configuration import H_MEAN, C_MEAN, H_STD, C_STD
 
 cli_path = Path('new_cli/citydnn')
 

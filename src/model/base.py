@@ -7,7 +7,7 @@ import pdb
 class Net(L.LightningModule):
     def __init__(self):
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["scaling"])
         self.encoder = nn.Sequential(nn.Linear(25, 128), nn.BatchNorm1d(
             128), nn.ReLU(), nn.Linear(128, 256), nn.BatchNorm1d(256))
         self.heat_decoder = nn.Sequential(

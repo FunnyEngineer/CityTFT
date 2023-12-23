@@ -40,7 +40,7 @@ def setting_logger():
 
 def train(config):
     logger = TensorBoardLogger(
-        '', name='us_city', version='rnn_v2_hidden32_dropout8e-1')
+        '', name='us_city', version='rnn_v2_hidden64_dropout8e-1')
 
     save_best, save_last = setting_logger()
     # train the model
@@ -48,16 +48,14 @@ def train(config):
                         accelerator='gpu', devices=config.devices, callbacks=[save_last, save_best])
 
     # init datamodule
-    dm = USCityDataModule(input_ts=input_seq_len, cli_dir=config.cli_dir, res_dir=config.res_dir,
-                          bud_dir=config.bud_dir, ref_csv=config.ref_csv, num_workers=config.num_workers)
+    dm = USCityDataModule(scaling=config.scaling, input_ts=input_seq_len, cli_dir=config.cli_dir, res_dir=config.res_dir,
+                          bud_dir=config.bud_dir, ref_csv=config.ref_csv, num_workers=config.num_workers,
+                          batch_size=128)
     dm.setup()
 
     # init model
-    # model = RNNSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
-    # model = RNNEmbedNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
-    # model = TransNetV2(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
     model = RNNSeqNetV2(input_dim=input_dim, input_ts=input_seq_len,
-                        output_ts=input_seq_len, hidden_dim=32, dropout=0.8)
+                        output_ts=input_seq_len, hidden_dim=64, dropout=0.8, scaling=config.scaling)
 
     # train the model
     trainer.fit(model, datamodule=dm)

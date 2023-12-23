@@ -10,26 +10,38 @@ if 'tacc' in host_name:
 else:
     config = TRAIN_CONFIGS['local']
 
+
 def read_climate_file(file_path):
     cli = pd.read_csv(file_path, sep='\t', skiprows=6, dtype=np.float16)
     cli, _ = scaling_df(cli, type='cli')
     return cli
 
+
 def read_result_file(file_path):
-    res = pd.read_csv(file_path, sep='\t', dtype=np.float32) # .dropna(axis=1, how='any')
-    res = res.loc[:, (res.columns.str.contains('Heating')| res.columns.str.contains('Cooling'))]
-    res = res.fillna(0) # since there is only 0.04% nan values in total, should be fine
+    # .dropna(axis=1, how='any')
+    res = pd.read_csv(file_path, sep='\t', dtype=np.float32)
+    res = res.loc[:, (res.columns.str.contains('Heating') |
+                      res.columns.str.contains('Cooling'))]
+    # since there is only 0.04% nan values in total, should be fine
+    res = res.fillna(0)
     return res
+
 
 def read_result_file_csv(file_path):
-    res = pd.read_csv(file_path, index_col=0, dtype=np.float32) # .dropna(axis=1, how='any')
-    res = res.fillna(0) # since there is only 0.04% nan values in total, should be fine
+    # .dropna(axis=1, how='any')
+    res = pd.read_csv(file_path, index_col=0, dtype=np.float32)
+    # since there is only 0.04% nan values in total, should be fine
+    res = res.fillna(0)
     return res
 
+
 def normalize_load(res, h_mean, h_std, c_mean, c_std):
-    res.loc[:, (res.columns.str.contains('Heating'))] = (res.loc[:, (res.columns.str.contains('Heating'))] - h_mean) / h_std
-    res.loc[:, (res.columns.str.contains('Cooling'))] = (res.loc[:, (res.columns.str.contains('Cooling'))] - c_mean) / c_std
+    res.loc[:, (res.columns.str.contains('Heating'))] = (
+        res.loc[:, (res.columns.str.contains('Heating'))] - h_mean) / h_std
+    res.loc[:, (res.columns.str.contains('Cooling'))] = (
+        res.loc[:, (res.columns.str.contains('Cooling'))] - c_mean) / c_std
     return res
+
 
 def read_building_info(file_path):
     bud = pd.read_csv(file_path).dropna(axis=1, how='any')
@@ -37,7 +49,8 @@ def read_building_info(file_path):
     bud.index = bud.id
     return bud
 
-def scaling_df(df, start_col = 0, type = 'cli'):
+
+def scaling_df(df, start_col=0, type='cli'):
     if type == 'cli':
         scaler = load(open(config.cli_scaler, 'rb'))
     else:

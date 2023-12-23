@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from configs.configuration import H_MEAN, H_STD, C_MEAN, C_STD
 from utils.criterions import QuantileLoss
 import lightning as L
 from torch.nn import LayerNorm
@@ -474,7 +473,7 @@ class TemporalFusionTransformer(L.LightningModule):
     Implementation of https://arxiv.org/abs/1912.09363 
     """
 
-    def __init__(self, config):
+    def __init__(self, config, scaling):
         super().__init__()
 
         if hasattr(config, 'model'):
@@ -496,10 +495,11 @@ class TemporalFusionTransformer(L.LightningModule):
         self.quantile = config.quantiles
         self.quantile_loss = QuantileLoss(self.quantile)
 
-        self.h_zero = -H_MEAN / H_STD
-        self.c_zero = -C_MEAN / C_STD
-        self.h_trigger_ratio = 0.3159
-        self.c_trigger_ratio = 0.4933
+        self.scaling = scaling
+        self.h_zero = -scaling.H_MEAN / scaling.H_STD
+        self.c_zero = -scaling.C_MEAN / scaling.C_STD
+        self.h_trigger_ratio = scaling.H_TRIGGER_RATIO
+        self.c_trigger_ratio = scaling.C_TRIGGER_RATIO
 
         self.validation_confusion_matrix = {'heat': {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0},
                                             'cool': {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0}}
@@ -617,8 +617,8 @@ class TemporalFusionTransformer(L.LightningModule):
 
         targets = batch['target']
 
-        targets[:, :, 0] = targets[:, :, 0] * H_STD + H_MEAN
-        targets[:, :, 1] = targets[:, :, 1] * C_STD + C_MEAN
+        targets[:, :, 0] = targets[:, :, 0] * self.scaling.H_STD + self.scaling.H_MEAN
+        targets[:, :, 1] = targets[:, :, 1] * self.scaling.C_STD + self.scaling.C_MEAN
         return  self.predict(out, prob_out), targets
 
     def configure_optimizers(self):
@@ -628,8 +628,8 @@ class TemporalFusionTransformer(L.LightningModule):
         heat_prob = prob_out[..., 0].unsqueeze(2)
         cool_prob = prob_out[..., 1].unsqueeze(2)
 
-        out[:, :, :3] = out[:, :, :3] * H_STD + H_MEAN
-        out[:, :, 3:] = out[:, :, 3:] * C_STD + C_MEAN
+        out[:, :, :3] = out[:, :, :3] * self.scaling.H_STD + self.scaling.H_MEAN
+        out[:, :, 3:] = out[:, :, 3:] * self.scaling.C_STD + self.scaling.C_MEAN
         idx = self.quantile.index(0.5)
         heat_hat = out[:, :, idx]
         cool_hat = out[:, :, idx + 3]

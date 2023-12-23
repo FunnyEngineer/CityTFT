@@ -11,13 +11,6 @@ from collections import OrderedDict
 from torch.utils.data._utils.collate import default_collate
 
 
-# global mean and std
-h_mean = 208067.33730670897
-h_std = 241361.16853850652
-c_mean = -227953.4075332571
-c_std = 259908.86350470388
-
-
 def collate_tft_fn(batch, *, collate_fn_map: Optional[Dict[Union[Type, Tuple[Type, ...]], Callable]] = None):
     # filter out empty value before collate:
     batch = [x for x in batch if x['s_cont'].nelement() != 0]
@@ -36,7 +29,7 @@ def collate_tensor_fn(batch, *, collate_fn_map: Optional[Dict[Union[Type, Tuple[
 
 
 class USCity(data.Dataset):
-    def __init__(self, ref_csv, bud_dir, cli_dir, res_dir, input_ts, bud_key) -> None:
+    def __init__(self, ref_csv, bud_dir, cli_dir, res_dir, input_ts, bud_key, scaling) -> None:
         super().__init__()
         self.cli_data = OrderedDict()
         self.bud_data = OrderedDict()
@@ -44,6 +37,7 @@ class USCity(data.Dataset):
         self.index_buds = np.array([], dtype=np.int64)
         self.index_city = np.array([], dtype=np.int64)
         self.bud_key = bud_key
+        self.scaling = scaling
 
         self.time_step = 24
         self.ts_length = input_ts
@@ -73,7 +67,7 @@ class USCity(data.Dataset):
 
             # normalize the load
             res_df = normalize_load(
-                res_df, h_mean, h_std, c_mean, c_std).astype(np.float16)
+                res_df, self.scaling.H_MEAN, self.scaling.H_STD, self.scaling.C_MEAN, self.scaling.C_STD).astype(np.float16)
             self.index_buds = np.append(self.index_buds, range(len(bud_df)))
             self.index_city = np.append(
                 self.index_city, np.repeat(i, len(bud_df)))
@@ -115,9 +109,10 @@ class USCityDataModule(L.LightningDataModule):
     USCityDataModule
     """
 
-    def __init__(self, input_ts, batch_size=64, cli_dir='/work/08388/tudai/ls6/US_cities/climate/historic', res_dir='/work/08388/tudai/ls6/US_cities/result',
+    def __init__(self, scaling, input_ts, batch_size=64, cli_dir='/work/08388/tudai/ls6/US_cities/climate/historic', res_dir='/work/08388/tudai/ls6/US_cities/result',
                  bud_dir='/work/08388/tudai/ls6/US_cities/bud', ref_csv='/work/08388/tudai/ls6/US_cities/ref.csv', mode='rnn', num_workers=20):
         super().__init__()
+        self.scaling = scaling
         self.intput_ts = input_ts
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -137,14 +132,14 @@ class USCityDataModule(L.LightningDataModule):
         pass
 
     def heat_inverse_transform(self, heat):
-        return heat * h_std + h_mean
+        return heat * self.scaling.H_STD + self.scaling.H_MEAN
 
     def cool_inverse_transform(self, cool):
-        return cool * c_std + c_mean
+        return cool * self.scaling.C_STD + self.scaling.C_MEAN
 
     def setup(self, stage=None):
         dataset = USCity(self.ref_csv, self.bud_dir,
-                         self.cli_dir, self.res_dir, self.intput_ts, self.bud_key)
+                         self.cli_dir, self.res_dir, self.intput_ts, self.bud_key, self.scaling)
         # use dataset to split train, val and test
         self.train, self.val, self.test = data.random_split(
             dataset, [0.8, 0.1, 0.1], generator=torch.Generator().manual_seed(1340)

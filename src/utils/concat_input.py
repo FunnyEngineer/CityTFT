@@ -3,7 +3,7 @@ import yaml
 from .misc import *
 import numpy as np
 import pdb
-from configs.configuration import H_MEAN, H_STD, C_MEAN, C_STD
+from configs.scaling.US_city import H_MEAN, H_STD, C_MEAN, C_STD
 
 
 def combine_res_bud_cli(cli_path, res_path, bud_path):
