@@ -23,17 +23,27 @@ def load_historgram(df, mode='cool'):
     if mode == 'cool':
         type_str = 'Cooling'
         c = '669bbc'
+        xran = (-1.5e+6, 0)
     else:
         type_str = 'Heating'
         c = '780000' 
+        xran = (0, 1.5e+6)
     fig, axs = plt.subplots(1, 2, figsize=(12, 4))
     values = df.values.flatten()
     axs[0].hist(values, bins=100, color='#'+c)
-    axs[0].set_title(f'Histogram of all {type_str} loads')
+    axs[0].set_title(f'All {type_str} loads')
     nonzero = values[(values != 0) & (~np.isnan(values))]
     print(f'Non-zero {type_str} loads: {nonzero.size}')
     axs[1].hist(nonzero, bins=100, color='#'+c)
-    axs[1].set_title(f'Histogram of non-zero {type_str} loads')
+    axs[1].set_title(f'Non-zero {type_str} loads')
+    # set larger font size
+    for ax in axs:
+        ax.tick_params(axis='both', which='major', labelsize=16)
+        # larger title size
+        ax.title.set_size(16)
+        # set x stop at 1.5e+6
+        ax.set_xlim(xran)
+
     plt.tight_layout()
     plt.savefig(f'figs/{type_str}_hist.png')
     plt.close()

@@ -40,7 +40,7 @@ def setting_logger():
 
 def train(config):
     logger = TensorBoardLogger(
-        '', name='us_city', version='rnn_v2_hidden64_dropout8e-1')
+        '', name='us_city', version='rnn_v2_hidden128_dropout8e-1')
 
     save_best, save_last = setting_logger()
     # train the model
@@ -55,7 +55,7 @@ def train(config):
 
     # init model
     model = RNNSeqNetV2(input_dim=input_dim, input_ts=input_seq_len,
-                        output_ts=input_seq_len, hidden_dim=64, dropout=0.8, scaling=config.scaling)
+                        output_ts=input_seq_len, hidden_dim=128, dropout=0.8, scaling=config.scaling)
 
     # train the model
     trainer.fit(model, datamodule=dm)

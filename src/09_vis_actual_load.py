@@ -14,42 +14,49 @@ input_seq_len = 24
 
 cool_dict = {'RNN': '#513b56', 'Transformer': '#f4a259', 'TFT': '#25a18e'} # '#F4D35E', '#EE964B', '#F95738'
 def plot_heat_cool_seq_batch(pred_dict, start_bi=0):
-    plot_true = False
-    fig, axs = plt.subplots(2, 1, figsize=(20, 6))
-    for mode in pred_dict:
-        predictions = pred_dict[mode]
-        target_len = 1536
-        heat_true = torch.zeros(target_len)
-        heat_pred = torch.zeros(target_len)
-        cool_true = torch.zeros(target_len)
-        cool_pred = torch.zeros(target_len)
-        i = 0
-        bi = start_bi
-        while target_len > i:
-            batch_len = predictions[bi][1][:,:, 0].nelement()
-            if (target_len-i) >= batch_len:
-                heat_true[i:i+batch_len] = predictions[bi][1][:, :, 0].flatten()
-                heat_pred[i:i+batch_len] = predictions[bi][0][0].flatten()
-                cool_true[i:i+batch_len] = predictions[bi][1][:, :, 1].flatten()
-                cool_pred[i:i+batch_len] = predictions[bi][0][1].flatten()
-            else:
-                heat_true[i:] = predictions[bi][1][:, :, 0].flatten()[:(target_len-i)]
-                heat_pred[i:] = predictions[bi][0][0].flatten()[:(target_len-i)]
-                cool_true[i:] = predictions[bi][1][:, :, 1].flatten()[:(target_len-i)]
-                cool_pred[i:] = predictions[bi][0][1].flatten()[:(target_len-i)]
-            i += batch_len
-            bi += 1
-        if plot_true == False:
-            axs[0].plot(heat_true.cpu(), color='red', label='CitySim', lw=3)
-            axs[1].plot(cool_true.cpu(), color='blue', label='CitySim', lw=3)
-            plot_true = True
-        axs[0].plot(heat_pred.cpu(), color=cool_dict[mode], label=f'{mode}', ls='-.')
-        axs[1].plot(cool_pred.cpu(), color=cool_dict[mode], label=f'{mode}', ls='-.')
-    axs[0].set_title('Heating loads')
-    axs[1].set_title('Cooling loads')
-    axs[0].legend()
-    axs[1].legend()
-    plt.show()
+    fig = plt.figure(constrained_layout=True, figsize=(20, 8))
+    figs = fig.subfigures(2, 1)
+    for row, subfig in enumerate(figs):
+        plot_true = False
+        # set global font size larger
+        plt.rcParams.update({'font.size': 24})
+        subfig.suptitle(['Heating loads', 'Cooling loads'][row])
+
+        target_len = 1152
+
+        axs = subfig.subplots(nrows=1, ncols=2, gridspec_kw={'width_ratios': [4, 1]}, sharey=True)
+        true_c = ['red', 'blue'][row]
+        long_si = [450, 1050]
+        short_si = 735
+        for mode in pred_dict:
+            predictions = pred_dict[mode]
+            heat_true = torch.zeros(target_len)
+            heat_pred = torch.zeros(target_len)
+            i = 0
+            bi = start_bi
+            while target_len > i:
+                batch_len = predictions[bi][1][:,:, 0].nelement()
+                if (target_len-i) >= batch_len:
+                    heat_true[i:i+batch_len] = predictions[bi][1][:, :, row].flatten()
+                    heat_pred[i:i+batch_len] = predictions[bi][0][row].flatten()
+                else:
+                    heat_true[i:] = predictions[bi][1][:, :, row].flatten()[:(target_len-i)]
+                    heat_pred[i:] = predictions[bi][0][row].flatten()[:(target_len-i)]
+                i += batch_len
+                bi += 1
+            if plot_true == False:
+                axs[0].plot(range(long_si[0], long_si[1]), heat_true[long_si[0]:long_si[1]].cpu(), color=true_c, label='CitySim', lw=2)
+                axs[1].plot(range(short_si, short_si+72), heat_true[short_si:short_si+72].cpu(), color=true_c, label='CitySim', lw=2)
+
+                plot_true = True
+            axs[0].plot(range(long_si[0], long_si[1]), heat_pred[long_si[0]:long_si[1]].cpu(), color=cool_dict[mode], label=f'{mode}', ls='-.')
+            axs[1].plot(range(short_si, short_si+72), heat_pred[short_si:short_si+72].cpu(), color=cool_dict[mode], label=f'{mode}', ls='-.')
+            # limit x range to 0 and length of target
+            axs[0].set_xlim(long_si[0], long_si[1])
+            axs[1].set_xlim(short_si, short_si+72)
+        # legend with smaller font size
+        axs[0].legend(prop={'size': 18})
+    plt.savefig('figs/demonstration_overall.png')
 
 
 def visual_load_differences():

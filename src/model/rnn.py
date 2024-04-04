@@ -1,4 +1,5 @@
 from typing import Any
+import lightning as L
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR, StepLR
@@ -6,6 +7,119 @@ from model.base import RNNNet, PermuteSeq
 from configs.configuration import QUANTILES
 from utils.criterions import QuantileLoss
 import pdb
+
+
+class LSTMSeq(L.LightningModule):
+    def __init__(self, input_dim: int, input_seq_len: int, output_seq_len: int,
+                 encode_layers: int, decode_layers: int,
+                 hidden_dim: int, dropout: float, scaling) -> None:
+        super().__init__()
+        self.input_dim = input_dim
+        self.input_seq_len = input_seq_len
+        self.output_seq_len = output_seq_len
+        self.encode_layers = encode_layers
+        self.decode_layers = decode_layers
+        self.hidden_dim = hidden_dim
+        self.dropout = dropout
+        self.scaling = scaling
+        self.save_hyperparameters(ignore=['scaling'])
+
+        self.encoder = nn.LSTM(input_size=self.input_dim,
+                               hidden_size=self.hidden_dim,
+                               num_layers=self.encode_layers,
+                               dropout=self.dropout,
+                               batch_first=True)
+        self.heat_lstm_decoder = nn.LSTM(input_size=self.hidden_dim,
+                                         hidden_size=self.hidden_dim,
+                                         num_layers=self.decode_layers,
+                                         dropout=self.dropout,
+                                         batch_first=True)
+        self.cool_lstm_decoder = nn.LSTM(input_size=self.hidden_dim,
+                                         hidden_size=self.hidden_dim,
+                                         num_layers=self.decode_layers,
+                                         dropout=self.dropout,
+                                         batch_first=True)
+        self.heat_decoder = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim//2),
+            PermuteSeq(),
+            nn.BatchNorm1d(hidden_dim//2),
+            PermuteSeq(),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, 1))
+        self.cool_decoder = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim//2),
+            PermuteSeq(),
+            nn.BatchNorm1d(hidden_dim//2),
+            PermuteSeq(),
+            nn.ReLU(),
+            nn.Linear(hidden_dim//2, 1))
+    
+    def forward(self, x):
+        z, encode_hidden = self.encoder(x)
+        heat_hat_seq, _ = self.heat_lstm_decoder(z, encode_hidden)
+        cool_hat_seq, _ = self.cool_lstm_decoder(z, encode_hidden)
+        heat_hat = self.heat_decoder(heat_hat_seq)
+        cool_hat = self.cool_decoder(cool_hat_seq)
+        return heat_hat, cool_hat
+    
+    def split_reshape(self, batch):
+        x, y = batch
+        x = x.view(x.size(0), self.input_ts, -1).float()
+        y = y.view(y.size(0), self.output_ts, -1).float()
+        return x, y
+    
+    def criterion(self, heat_hat, cool_hat, y):
+        heat_loss = nn.functional.mse_loss(heat_hat, y[:, :, 0].unsqueeze(2))
+        cool_loss = nn.functional.mse_loss(cool_hat, y[:, :, 1].unsqueeze(2))
+        return heat_loss, cool_loss
+    
+
+    def training_step(self, batch, batch_idx):
+        x, y = self.split_reshape(batch)
+
+        heat_hat, cool_hat = self(x)
+
+        heat_loss, cool_loss = self.criterion(heat_hat, cool_hat, y)
+        loss = heat_loss + cool_loss
+        self.log_dict({"train/heat_loss": heat_loss, "train/cool_loss": cool_loss,
+                       "train/total_loss": loss, "global_step": self.global_step})
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        x, y = self.split_reshape(batch)
+
+        heat_hat, cool_hat = self(x)
+
+        heat_loss, cool_loss = self.criterion(heat_hat, cool_hat, y)
+        loss = heat_loss + cool_loss
+        self.log_dict({"val/heat_loss": heat_loss,
+                      "val/cool_loss": cool_loss, "val/total_loss": loss})
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        x, y = self.split_reshape(batch)
+
+        heat_hat, cool_hat = self(x)
+
+        heat_loss, cool_loss = self.criterion(heat_hat, cool_hat, y)
+        loss = heat_loss + cool_loss
+        self.log_dict({"test/heat_loss": heat_loss,
+                      "test/cool_loss": cool_loss, "test/total_loss": loss})
+        return loss
+
+    def predict(self, x):
+        heat_hat, cool_hat = self.forward(x)
+        heat_hat = heat_hat * self.scaling.H_STD + self.scaling.H_MEAN
+        cool_hat = cool_hat * self.scaling.C_STD + self.scaling.C_MEAN
+        return heat_hat, cool_hat
+
+    def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
+
+        x, y = self.split_reshape(batch)
+        # inverse transform the load
+        y[:, :, 0] = y[:, :, 0] * self.h_std + self.h_mean
+        y[:, :, 1] = y[:, :, 1] * self.c_std + self.c_mean
+        return self.predict(x), y
 
 
 class RNNSeqNet(RNNNet):
@@ -88,8 +202,10 @@ class RNNSeqNetV2(RNNSeqNet):
         super().__init__(input_dim, input_ts, output_ts,
                          hidden_dim, dropout, scaling)
         self.scaling = scaling
-        self.h_zero = torch.tensor(-scaling.H_MEAN / scaling.H_STD).to(torch.float16)
-        self.c_zero = torch.tensor(-scaling.C_MEAN / scaling.C_STD).to(torch.float16)
+        self.h_zero = torch.tensor(-scaling.H_MEAN /
+                                   scaling.H_STD).to(torch.float16)
+        self.c_zero = torch.tensor(-scaling.C_MEAN /
+                                   scaling.C_STD).to(torch.float16)
         self.h_trigger_ratio = scaling.H_TRIGGER_RATIO
         self.c_trigger_ratio = scaling.C_TRIGGER_RATIO
         self.quantiles = QUANTILES
@@ -140,7 +256,8 @@ class RNNSeqNetV2(RNNSeqNet):
         heat_loss, cool_loss, heat_prob_loss, cool_prob_loss = self.criterion(
             heat_hat, cool_hat, heat_prob, cool_prob, y)
         loss = heat_loss + cool_loss + heat_prob_loss + cool_prob_loss
-        self.log_cls_result(y, self.sigmoid(heat_prob), self.sigmoid(cool_prob))
+        self.log_cls_result(y, self.sigmoid(heat_prob),
+                            self.sigmoid(cool_prob))
 
         self.log_dict({"train/heat_loss": heat_loss, "train/cool_loss": cool_loss,
                        "train/heat_prob_loss": heat_prob_loss, "train/cool_prob_loss": cool_prob_loss,
@@ -158,7 +275,8 @@ class RNNSeqNetV2(RNNSeqNet):
         heat_loss = 0 if torch.isnan(heat_loss) else heat_loss
         cool_loss = 0 if torch.isnan(cool_loss) else cool_loss
         loss = heat_prob_loss + cool_prob_loss + heat_loss + cool_loss
-        self.record_cls_output(y, self.sigmoid(heat_prob), self.sigmoid(cool_prob))
+        self.record_cls_output(y, self.sigmoid(
+            heat_prob), self.sigmoid(cool_prob))
 
         self.log_dict({"val/heat_loss": heat_loss, "val/cool_loss": cool_loss,
                        "val/heat_prob_loss": heat_prob_loss, "val/cool_prob_loss": cool_prob_loss,
