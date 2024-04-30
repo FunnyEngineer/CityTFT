@@ -425,3 +425,36 @@ Finding the dropout could be more effective in validation test
 │    test/heat_prob_loss    │    0.35640254616737366    │
 │      test/total_loss      │    1.3455960750579834     │
 └───────────────────────────┴───────────────────────────┘
+
+
+## 2024.04.04
+
+### Prepare for the E+ dataset
+
+Questions for Kingsley.
+
+1. Is there a way to get the simulation data without you actually modeling it?
+
+2. What is the modification of the script you make when you do mechanic load, partial load, and ideal load? Like if I would like to reproduce what you have been simulate, is there a script (.sh, .py) that I can refer to?
+
+3. I know that is modeling hearing and cooling by electricity, is it okay or valid to ignore other output and just focus on these two variables?
+
+4. 15 mins vs 1 hour?
+
+5. how do you generate setpoints.csv?
+
+6. 
+
+#### Result 
+
+rnn_v2_hidden128_dropout8e-1
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃        Test metric        ┃       DataLoader 0        ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│        global_step        │         9388031.0         │
+│      test/cool_loss       │    0.04305875301361084    │
+│    test/cool_prob_loss    │   0.008808477781713009    │
+│      test/heat_loss       │    0.0668027251958847     │
+│    test/heat_prob_loss    │    0.02083391137421131    │
+│      test/total_loss      │    0.13950397074222565    │
+└───────────────────────────┴───────────────────────────┘

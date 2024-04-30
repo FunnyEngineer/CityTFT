@@ -16,3 +16,4 @@ CitySim-Solver/**
 **/*.pyc
 **/__pycache__/**
 us_city/**
+ut_campus/**

@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from pickle import load
 import os
-from configs.train_config import TRAIN_CONFIGS
+from configs.us_city_config import TRAIN_CONFIGS
 host_name = os.popen('hostname').read().strip()
 if 'tacc' in host_name:
     config = TRAIN_CONFIGS['tacc']

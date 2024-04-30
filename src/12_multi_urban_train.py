@@ -5,7 +5,7 @@ from model.rnn import RNNSeqNetV2
 from model.transformer import TransNetV2
 from model.model_tft import TemporalFusionTransformer
 from configs.configuration import CONFIGS
-from configs.train_config import TRAIN_CONFIGS
+from configs.us_city_config import TRAIN_CONFIGS
 
 from lightning.pytorch.callbacks import ModelCheckpoint
 import lightning as L
@@ -58,7 +58,8 @@ def train(config):
                         output_ts=input_seq_len, hidden_dim=128, dropout=0.8, scaling=config.scaling)
 
     # train the model
-    trainer.fit(model, datamodule=dm)
+    trainer.fit(model, datamodule=dm,
+                ckpt_path='us_city/rnn_v2_hidden128_dropout8e-1/checkpoints/last.ckpt')
 
     # test the model
     trainer.test(model, datamodule=dm)

@@ -235,8 +235,8 @@ class CitySimConfig():
         self.encoder_length = 24
 
         self.n_head = 4
-        self.hidden_size = 256
-        self.dropout = 0.3
+        self.hidden_size = 128
+        self.dropout = 0.5
         self.attn_dropout = 0.0
 
         #### Derived variables ####

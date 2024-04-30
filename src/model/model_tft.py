@@ -19,6 +19,8 @@ import pdb
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim.lr_scheduler import SequentialLR, LinearLR, CosineAnnealingLR, StepLR
+
 
 from torch import Tensor
 from torch.nn.parameter import UninitializedParameter
@@ -33,10 +35,13 @@ class MaybeLayerNorm(nn.Module):
         if output_size and output_size == 1:
             self.ln = nn.Identity()
         else:
-            self.ln = LayerNorm(output_size if output_size else hidden_size, eps=eps)
+            self.ln = LayerNorm(
+                output_size if output_size else hidden_size, eps=eps)
 
     def forward(self, x):
         return self.ln(x)
+
+# Gated Linear Units
 
 
 class GLU(nn.Module):
@@ -48,6 +53,8 @@ class GLU(nn.Module):
         x = self.lin(x)
         x = F.glu(x)
         return x
+
+# Gated Residual Network
 
 
 class GRN(nn.Module):
@@ -61,13 +68,16 @@ class GRN(nn.Module):
         self.layer_norm = MaybeLayerNorm(output_size, hidden_size, eps=1e-3)
         self.lin_a = nn.Linear(input_size, hidden_size)
         if context_hidden_size is not None:
-            self.lin_c = nn.Linear(context_hidden_size, hidden_size, bias=False)
+            self.lin_c = nn.Linear(context_hidden_size,
+                                   hidden_size, bias=False)
         else:
             self.lin_c = nn.Identity()
         self.lin_i = nn.Linear(hidden_size, hidden_size)
-        self.glu = GLU(hidden_size, output_size if output_size else hidden_size)
+        self.glu = GLU(
+            hidden_size, output_size if output_size else hidden_size)
         self.dropout = nn.Dropout(dropout)
-        self.out_proj = nn.Linear(input_size, output_size) if output_size else None
+        self.out_proj = nn.Linear(
+            input_size, output_size) if output_size else None
 
     def forward(self, a: Tensor, c: Optional[Tensor] = None):
         x = self.lin_a(a)
@@ -143,7 +153,8 @@ class TFTEmbedding(nn.Module):
                 self.t_cont_k_inp_size, self.hidden_size)) if self.t_cont_k_inp_size else None
             self.t_cont_o_embedding_bias = nn.Parameter(torch.zeros(
                 self.t_cont_o_inp_size, self.hidden_size)) if self.t_cont_o_inp_size else None
-            self.t_tgt_embedding_bias = nn.Parameter(torch.zeros(self.t_tgt_size, self.hidden_size))
+            self.t_tgt_embedding_bias = nn.Parameter(
+                torch.zeros(self.t_tgt_size, self.hidden_size))
 
             self.reset_parameters()
 
@@ -290,21 +301,27 @@ class LazyEmbedding(nn.modules.lazy.LazyModuleMixin, TFTEmbedding):
             t_tgt_obs = x['target']  # Has to be present
 
             if s_cont_inp.shape[-1]:
-                self.s_cont_embedding_vectors.materialize((s_cont_inp.shape[-1], self.hidden_size))
-                self.s_cont_embedding_bias.materialize((s_cont_inp.shape[-1], self.hidden_size))
+                self.s_cont_embedding_vectors.materialize(
+                    (s_cont_inp.shape[-1], self.hidden_size))
+                self.s_cont_embedding_bias.materialize(
+                    (s_cont_inp.shape[-1], self.hidden_size))
 
             if t_cont_k_inp.shape[-1]:
                 self.t_cont_k_embedding_vectors.materialize(
                     (t_cont_k_inp.shape[-1], self.hidden_size))
-                self.t_cont_k_embedding_bias.materialize((t_cont_k_inp.shape[-1], self.hidden_size))
+                self.t_cont_k_embedding_bias.materialize(
+                    (t_cont_k_inp.shape[-1], self.hidden_size))
 
             if t_cont_o_inp.shape[-1]:
                 self.t_cont_o_embedding_vectors.materialize(
                     (t_cont_o_inp.shape[-1], self.hidden_size))
-                self.t_cont_o_embedding_bias.materialize((t_cont_o_inp.shape[-1], self.hidden_size))
+                self.t_cont_o_embedding_bias.materialize(
+                    (t_cont_o_inp.shape[-1], self.hidden_size))
 
-            self.t_tgt_embedding_vectors.materialize((t_tgt_obs.shape[-1], self.hidden_size))
-            self.t_tgt_embedding_bias.materialize((t_tgt_obs.shape[-1], self.hidden_size))
+            self.t_tgt_embedding_vectors.materialize(
+                (t_tgt_obs.shape[-1], self.hidden_size))
+            self.t_tgt_embedding_bias.materialize(
+                (t_tgt_obs.shape[-1], self.hidden_size))
 
             self.reset_parameters()
 
@@ -321,12 +338,14 @@ class VariableSelectionNetwork(nn.Module):
         Xi = torch.flatten(x, start_dim=-2)
         grn_outputs = self.joint_grn(Xi, c=context)
         sparse_weights = F.softmax(grn_outputs, dim=-1)
-        transformed_embed_list = [m(x[..., i, :]) for i, m in enumerate(self.var_grns)]
+        transformed_embed_list = [m(x[..., i, :])
+                                  for i, m in enumerate(self.var_grns)]
         transformed_embed = torch.stack(transformed_embed_list, dim=-1)
         # the line below performs batched matrix vector multiplication
         # for temporal features it's bthf,btf->bth
         # for static features it's bhf,bf->bh
-        variable_ctx = torch.matmul(transformed_embed, sparse_weights.unsqueeze(-1)).squeeze(-1)
+        variable_ctx = torch.matmul(
+            transformed_embed, sparse_weights.unsqueeze(-1)).squeeze(-1)
 
         return variable_ctx, sparse_weights
 
@@ -376,7 +395,8 @@ class InterpretableMultiHeadAttention(nn.Module):
         v = v.view(bs, t, self.d_head)
 
         # attn_score = torch.einsum('bind,bjnd->bnij', q, k)
-        attn_score = torch.matmul(q.permute((0, 2, 1, 3)), k.permute((0, 2, 3, 1)))
+        attn_score = torch.matmul(
+            q.permute((0, 2, 1, 3)), k.permute((0, 2, 3, 1)))
         attn_score.mul_(self.scale)
 
         attn_score = attn_score + self._mask
@@ -398,10 +418,14 @@ class TFTBack(nn.Module):
         super().__init__()
 
         self.encoder_length = config.encoder_length
-        self.history_vsn = VariableSelectionNetwork(config, config.num_historic_vars)
-        self.history_encoder = nn.LSTM(config.hidden_size, config.hidden_size, batch_first=True)
-        self.future_vsn = VariableSelectionNetwork(config, config.num_future_vars)
-        self.future_encoder = nn.LSTM(config.hidden_size, config.hidden_size, batch_first=True)
+        self.history_vsn = VariableSelectionNetwork(
+            config, config.num_historic_vars)
+        self.history_encoder = nn.LSTM(
+            config.hidden_size, config.hidden_size, batch_first=True)
+        self.future_vsn = VariableSelectionNetwork(
+            config, config.num_future_vars)
+        self.future_encoder = nn.LSTM(
+            config.hidden_size, config.hidden_size, batch_first=True)
 
         self.input_gate = GLU(config.hidden_size, config.hidden_size)
         self.input_gate_ln = LayerNorm(config.hidden_size, eps=1e-3)
@@ -423,7 +447,8 @@ class TFTBack(nn.Module):
 
         self.quantile_proj = nn.Linear(
             config.hidden_size, config.temporal_target_size * len(config.quantiles))
-        self.prob_proj = nn.Linear(config.hidden_size, config.temporal_target_size)
+        self.prob_proj = nn.Linear(
+            config.hidden_size, config.temporal_target_size)
 
     def forward(self, historical_inputs, cs, ch, cc, ce, future_inputs):
         historical_features, _ = self.history_vsn(historical_inputs, cs)
@@ -433,7 +458,8 @@ class TFTBack(nn.Module):
         torch.cuda.synchronize()
 
         # skip connection
-        input_embedding = torch.cat([historical_features, future_features], dim=1)
+        input_embedding = torch.cat(
+            [historical_features, future_features], dim=1)
         temporal_features = torch.cat([history, future], dim=1)
         temporal_features = self.input_gate(temporal_features)
         temporal_features = temporal_features + input_embedding
@@ -503,9 +529,11 @@ class TemporalFusionTransformer(L.LightningModule):
 
         self.validation_confusion_matrix = {'heat': {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0},
                                             'cool': {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0}}
-        
-        self.save_hyperparameters()
-    
+
+        self.save_hyperparameters(ignore=['scaling'])
+
+    def inverse_transform_load(self, heat, cool):
+        return heat * self.scaling.H_STD + self.scaling.H_MEAN, cool * self.scaling.C_STD + self.scaling.C_MEAN
 
     def forward(self, x: Dict[str, Tensor]) -> Tensor:
         s_inp, t_known_inp, t_observed_inp, t_observed_tgt = self.embedding(x)
@@ -516,9 +544,10 @@ class TemporalFusionTransformer(L.LightningModule):
 
         # Temporal input
         _historical_inputs = [t_known_inp[:, :self.encoder_length, :]]
-        
+
         if t_observed_inp is not None:
-            _historical_inputs.insert(0, t_observed_inp[:, :self.encoder_length, :])
+            _historical_inputs.insert(
+                0, t_observed_inp[:, :self.encoder_length, :])
 
         historical_inputs = torch.cat(_historical_inputs, dim=-2)
         future_inputs = t_known_inp[:, :self.encoder_length]
@@ -527,23 +556,31 @@ class TemporalFusionTransformer(L.LightningModule):
     def criterion(self, out, prob_out, targets):
         h_mask = targets[:, :, 0].ne(self.h_zero)
         c_mask = targets[:, :, 1].ne(self.c_zero)
-        h_prob_loss = F.binary_cross_entropy(prob_out[:, :, 0].unsqueeze(2), h_mask.unsqueeze(2).float())
-        c_prob_loss = F.binary_cross_entropy(prob_out[:, :, 1].unsqueeze(2), c_mask.unsqueeze(2).float())
-        heat_loss = self.quantile_loss(out[:, :, :3][h_mask], targets[:, :, 0].unsqueeze(2)[h_mask]).sum()
-        cool_loss = self.quantile_loss(out[:, :, 3:][c_mask], targets[:, :, 1].unsqueeze(2)[c_mask]).sum()
+        h_prob_loss = F.binary_cross_entropy(
+            prob_out[:, :, 0].unsqueeze(2), h_mask.unsqueeze(2).float())
+        c_prob_loss = F.binary_cross_entropy(
+            prob_out[:, :, 1].unsqueeze(2), c_mask.unsqueeze(2).float())
+        heat_loss = self.quantile_loss(
+            out[:, :, :3][h_mask], targets[:, :, 0].unsqueeze(2)[h_mask]).sum()
+        cool_loss = self.quantile_loss(
+            out[:, :, 3:][c_mask], targets[:, :, 1].unsqueeze(2)[c_mask]).sum()
         return heat_loss, cool_loss, h_prob_loss, c_prob_loss
 
     def training_step(self, batch, batch_idx):
         out, prob_out = self(batch)
 
         targets = batch['target']
-        heat_loss, cool_loss, h_prob_loss, c_prob_loss = self.criterion(out, prob_out, targets)
+        heat_loss, cool_loss, h_prob_loss, c_prob_loss = self.criterion(
+            out, prob_out, targets)
         loss = heat_loss + cool_loss + h_prob_loss + c_prob_loss
         self.log_cls_result(targets, prob_out)
 
         self.log_dict({"train/heat_loss": heat_loss, "train/cool_loss": cool_loss,
                        "train/heat_prob_loss": h_prob_loss, "train/cool_prob_loss": c_prob_loss,
                        "train/total_loss": loss, "global_step": self.global_step})
+        # log actual load diff
+        self.log_load_difference(
+            targets, out, prob_out, stage='train')
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -551,8 +588,9 @@ class TemporalFusionTransformer(L.LightningModule):
 
         targets = batch['target']
 
-        heat_loss, cool_loss, h_prob_loss, c_prob_loss = self.criterion(out, prob_out, targets)
-        
+        heat_loss, cool_loss, h_prob_loss, c_prob_loss = self.criterion(
+            out, prob_out, targets)
+
         heat_loss = 0 if torch.isnan(heat_loss) else heat_loss
         cool_loss = 0 if torch.isnan(cool_loss) else cool_loss
         loss = heat_loss + cool_loss + h_prob_loss + c_prob_loss
@@ -561,6 +599,9 @@ class TemporalFusionTransformer(L.LightningModule):
         self.log_dict({"val/heat_loss": heat_loss, "val/cool_loss": cool_loss,
                        "val/heat_prob_loss": h_prob_loss, "val/cool_prob_loss": c_prob_loss,
                        "val/total_loss": loss, "global_step": self.global_step})
+        # log actual load diff
+        self.log_load_difference(
+            targets, out, prob_out, stage='val')
         return loss
 
     def on_validation_epoch_end(self):
@@ -569,15 +610,17 @@ class TemporalFusionTransformer(L.LightningModule):
             sin_confu_mat = self.validation_confusion_matrix[h_or_c]
             accuracy = (sin_confu_mat['tp'] + sin_confu_mat['tn']) / (
                 sin_confu_mat['tp'] + sin_confu_mat['tn'] + sin_confu_mat['fp'] + sin_confu_mat['fn'])
-            precision = sin_confu_mat['tp'] / (sin_confu_mat['tp'] + sin_confu_mat['fp'])
-            recall = sin_confu_mat['tp'] / (sin_confu_mat['tp'] + sin_confu_mat['fn'])
+            precision = sin_confu_mat['tp'] / \
+                (sin_confu_mat['tp'] + sin_confu_mat['fp'])
+            recall = sin_confu_mat['tp'] / \
+                (sin_confu_mat['tp'] + sin_confu_mat['fn'])
             f1 = 2 * precision * recall / (precision + recall)
             # log the results
             self.log_dict({f"val_prob/{h_or_c}/accuracy": accuracy, f"val_prob/{h_or_c}/precision": precision,
                            f"val_prob/{h_or_c}/recall": recall, f"val_prob/{h_or_c}/f1": f1})
         self.validation_confusion_matrix = {'heat': {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0},
                                             'cool': {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0}}
-    
+
     def record_cls_output(self, y, prob_out):
         heat_prob = prob_out[..., 0].unsqueeze(2)
         cool_prob = prob_out[..., 1].unsqueeze(2)
@@ -596,20 +639,23 @@ class TemporalFusionTransformer(L.LightningModule):
             self.validation_confusion_matrix[h_or_c]['fp'] += fp
             self.validation_confusion_matrix[h_or_c]['fn'] += fn
         return
-    
+
     def test_step(self, batch, batch_idx):
         out, prob_out = self(batch)
 
         targets = batch['target']
 
-        heat_loss, cool_loss, h_prob_loss, c_prob_loss = self.criterion(out, prob_out, targets)
-        
+        heat_loss, cool_loss, h_prob_loss, c_prob_loss = self.criterion(
+            out, prob_out, targets)
+
         heat_loss = 0 if torch.isnan(heat_loss) else heat_loss
         cool_loss = 0 if torch.isnan(cool_loss) else cool_loss
         loss = heat_loss + cool_loss + h_prob_loss + c_prob_loss
         self.log_dict({"test/heat_loss": heat_loss, "test/cool_loss": cool_loss,
                        "test/heat_prob_loss": h_prob_loss, "test/cool_prob_loss": c_prob_loss,
                        "test/total_loss": loss, "global_step": self.global_step})
+        # log actual load diff
+        self.log_load_difference(targets, out, prob_out, stage='test')
         return loss
 
     def predict_step(self, batch, batch_idx):
@@ -617,23 +663,38 @@ class TemporalFusionTransformer(L.LightningModule):
 
         targets = batch['target']
 
-        targets[:, :, 0] = targets[:, :, 0] * self.scaling.H_STD + self.scaling.H_MEAN
-        targets[:, :, 1] = targets[:, :, 1] * self.scaling.C_STD + self.scaling.C_MEAN
-        return  self.predict(out, prob_out), targets
+        targets[:, :, 0] = targets[:, :, 0] * \
+            self.scaling.H_STD + self.scaling.H_MEAN
+        targets[:, :, 1] = targets[:, :, 1] * \
+            self.scaling.C_STD + self.scaling.C_MEAN
+        return self.predict(out, prob_out), targets
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(), lr=1e-4)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4)
+        scheduler1 = LinearLR(
+            optimizer, start_factor=0.01, total_iters=50)
+        scheduler3 = CosineAnnealingLR(optimizer, T_max=100)
+        scheduler = SequentialLR(optimizer, schedulers=[
+                                 scheduler1, scheduler3], milestones=[300])
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler
+            },
+        }
 
     def predict(self, out, prob_out):
         heat_prob = prob_out[..., 0].unsqueeze(2)
         cool_prob = prob_out[..., 1].unsqueeze(2)
 
-        out[:, :, :3] = out[:, :, :3] * self.scaling.H_STD + self.scaling.H_MEAN
-        out[:, :, 3:] = out[:, :, 3:] * self.scaling.C_STD + self.scaling.C_MEAN
+        out[:, :, :3] = out[:, :, :3] * \
+            self.scaling.H_STD + self.scaling.H_MEAN
+        out[:, :, 3:] = out[:, :, 3:] * \
+            self.scaling.C_STD + self.scaling.C_MEAN
         idx = self.quantile.index(0.5)
         heat_hat = out[:, :, idx]
         cool_hat = out[:, :, idx + 3]
-        
+
         heat_hat[(heat_prob < self.h_trigger_ratio).squeeze()] = 0
         cool_hat[(cool_prob < self.c_trigger_ratio).squeeze()] = 0
 
@@ -660,4 +721,28 @@ class TemporalFusionTransformer(L.LightningModule):
             # log the results
             self.log_dict({f"{stage}_prob/{h_or_c}/accuracy": accuracy, f"{stage}_prob/{h_or_c}/precision": precision,
                            f"{stage}_prob/{h_or_c}/recall": recall, f"{stage}_prob/{h_or_c}/f1": f1})
-   
+
+    def generate_load(self, heat_hat, cool_hat, heat_prob, cool_prob):
+        heat_hat, cool_hat = self.inverse_transform_load(heat_hat, cool_hat)
+        heat_hat[(heat_prob < self.h_trigger_ratio).squeeze()] = 0
+        cool_hat[(cool_prob < self.c_trigger_ratio).squeeze()] = 0
+        return heat_hat, cool_hat
+
+    def log_load_difference(self, y, out, prob_out, stage='train'):
+        idx = self.quantile.index(0.5)
+        heat_hat = out[:, :, idx]
+        cool_hat = out[:, :, idx + 3]
+
+        heat_prob = prob_out[..., 0].unsqueeze(2)
+        cool_prob = prob_out[..., 1].unsqueeze(2)
+
+        heat_hat, cool_hat = self.generate_load(
+            heat_hat, cool_hat, heat_prob, cool_prob)
+
+        heat_true, cool_true = self.inverse_transform_load(
+            y[:, :, 0], y[:, :, 1])
+        
+        heat_diff = nn.functional.l1_loss(heat_true, heat_hat)
+        cool_diff = nn.functional.l1_loss(cool_true, cool_hat)
+        self.log_dict({f'{stage}/heat_diff': heat_diff, f'{stage}/cool_diff': cool_diff,
+                      f'{stage}/total_diff': heat_diff + cool_diff})

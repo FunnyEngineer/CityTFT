@@ -159,8 +159,10 @@ FEAT_NAMES = ['s_cat', 's_cont', 'k_cat',
 
 
 class CSTSMultiClimateTFTDataset(CSTSMultiClimateDataset):
-    def __init__(self, cli_dir, res_dir, cli_locs, bud_path, bud_key, seq_len=24, transform=None):
-        super().__init__(cli_dir, res_dir, cli_locs, bud_path, bud_key, seq_len, transform)
+    def __init__(self, cli_dir, res_dir, cli_locs, bud_path, bud_key, h_mean, h_std, c_mean, c_std,
+                 seq_len=24, transform=None):
+        super().__init__(cli_dir, res_dir, cli_locs, bud_path, bud_key,
+                         h_mean, h_std, c_mean, c_std, seq_len, transform)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
@@ -179,7 +181,9 @@ class CSTSMultiClimateTFTDataset(CSTSMultiClimateDataset):
             sin_bud = self.bud_df.loc[bud_i].to_numpy()  # (1, b_dim)
             sin_cli = self.cli_df_list[self.cli_locs[loc_i]
                                        ].iloc[time_i:time_i+self.seq_len].to_numpy()  # (in_len, c_dim)
-
+            sin_ts = np.expand_dims(np.arange(time_i, time_i+self.seq_len) /
+                                    8760, axis=1)  # (in_len, 1)
+            sin_cli = np.concatenate([sin_cli, sin_ts], axis=1)  # (in_len, c_dim+1)
             sin_res = self.res_df_list[self.cli_locs[loc_i]].iloc[time_i:time_i +
                                                                   self.seq_len, (bud_i-5)*2: (bud_i-5)*2+2].to_numpy()  # (in_len, 2)
             if np.isnan(sin_res).any():
@@ -301,14 +305,22 @@ class CitySimDataModule(L.LightningDataModule):
         if stage == 'fit' or stage is None:
             if self.mode != 'tft':
                 self.train_dataset = CSTSMultiClimateDataset(
-                    self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+                    self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key,
+                    self.scaling.H_MEAN, self.scaling.H_STD, self.scaling.C_MEAN, self.scaling.C_STD,
+                    transform=self.transform)
                 self.val_dataset = CSTSMultiClimateDataset(
-                    self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+                    self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key,
+                    self.scaling.H_MEAN, self.scaling.H_STD, self.scaling.C_MEAN, self.scaling.C_STD,
+                    transform=self.transform)
             else:
                 self.train_dataset = CSTSMultiClimateTFTDataset(
-                    self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+                    self.cli_dir, self.res_dir, self.train_cli_locs, self.building_path, self.bud_key,
+                    self.scaling.H_MEAN, self.scaling.H_STD, self.scaling.C_MEAN, self.scaling.C_STD,
+                    transform=self.transform)
                 self.val_dataset = CSTSMultiClimateTFTDataset(
-                    self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+                    self.cli_dir, self.res_dir, self.val_cli_locs, self.building_path, self.bud_key,
+                    self.scaling.H_MEAN, self.scaling.H_STD, self.scaling.C_MEAN, self.scaling.C_STD,
+                    transform=self.transform)
             # if self.input_ts > 1:
             #     self.train_dataset = CitySimTSDataset(
             #         cli_df, res_df, bud_df, train_index, self.bud_key, self.input_ts, self.output_ts, self.mode, self.transform)
@@ -323,10 +335,14 @@ class CitySimDataModule(L.LightningDataModule):
 
             if self.mode != 'tft':
                 self.test_dataset = CSTSMultiClimateDataset(
-                    self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+                    self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key,
+                    self.scaling.H_MEAN, self.scaling.H_STD, self.scaling.C_MEAN, self.scaling.C_STD,
+                    transform=self.transform)
             else:
                 self.test_dataset = CSTSMultiClimateTFTDataset(
-                    self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key, transform=self.transform)
+                    self.cli_dir, self.res_dir, self.test_cli_locs, self.building_path, self.bud_key,
+                    self.scaling.H_MEAN, self.scaling.H_STD, self.scaling.C_MEAN, self.scaling.C_STD,
+                    transform=self.transform)
 
             # if self.input_ts > 1:
             #     self.test_dataset = CitySimTSDataset(

@@ -11,7 +11,7 @@ class TACCConfig():
 
         self.num_workers = 31
 
-        self.task = 'us_city'
+        self.task = 'ut_campus'
         self.setup_task(self.task)
 
     def setup_task(self, task):
@@ -35,7 +35,7 @@ class LocalConfig(TACCConfig):
 
         self.num_workers = 20
 
-        self.task = 'us_city'
+        self.task = 'ut_campus'
         self.setup_task(self.task)
 
 TRAIN_CONFIGS = {
