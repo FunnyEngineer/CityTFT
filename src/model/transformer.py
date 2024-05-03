@@ -1,6 +1,7 @@
 from model.rnn import RNNSeqNet, RNNSeqNetV2, LSTMSeq, LSTMSeqQuantile, LSTMSeqProb
 from configs.configuration import QUANTILES
 from utils.criterions import QuantileLoss
+from torchvision.ops import sigmoid_focal_loss
 from model.base import PermuteSeq
 import torch
 import torch.nn as nn
@@ -252,8 +253,8 @@ class TransSeqProb(TransSeqQuantile):
 
     def generate_load(self, heat_hat, cool_hat, heat_prob, cool_prob):
         heat_hat, cool_hat = self.inverse_transform_load(heat_hat, cool_hat)
-        heat_hat[(heat_prob < self.h_trigger_ratio).squeeze()] = 0
-        cool_hat[(cool_prob < self.c_trigger_ratio).squeeze()] = 0
+        heat_hat[(torch.sigmoid(heat_prob) < self.h_trigger_ratio).squeeze()] = 0
+        cool_hat[(torch.sigmoid(cool_prob) < self.c_trigger_ratio).squeeze()] = 0
         return heat_hat, cool_hat
 
     def log_load_difference(self, y, heat_hat, cool_hat, heat_prob, cool_prob, stage='train'):
@@ -269,14 +270,18 @@ class TransSeqProb(TransSeqQuantile):
     def criterion(self, heat_hat, cool_hat, heat_prob, cool_prob, y, threshold=0.5):
         h_mask = (y[:, :, 0] != self.h_zero)
         c_mask = (y[:, :, 1] != self.c_zero)
-        heat_prob_loss = nn.functional.binary_cross_entropy_with_logits(
-            heat_prob, h_mask.unsqueeze(2).float())
+        # heat_prob_loss = nn.functional.binary_cross_entropy_with_logits(
+        #     heat_prob, h_mask.unsqueeze(2).float())
+        # cool_prob_loss = nn.functional.binary_cross_entropy_with_logits(
+        #     cool_prob, c_mask.unsqueeze(2).float())
+        heat_prob_loss = sigmoid_focal_loss(
+            heat_prob, h_mask.unsqueeze(2).float(), reduction='mean')
         cool_prob_loss = nn.functional.binary_cross_entropy_with_logits(
-            cool_prob, c_mask.unsqueeze(2).float())
+            cool_prob, c_mask.unsqueeze(2).float(), reduction='mean')
         heat_loss = nn.functional.mse_loss(
-            heat_hat[h_mask], y[:, :, 0].unsqueeze(2)[h_mask])
+            heat_hat, y[:, :, 0].unsqueeze(2))
         cool_loss = nn.functional.mse_loss(
-            cool_hat[c_mask], y[:, :, 1].unsqueeze(2)[c_mask])
+            cool_hat, y[:, :, 1].unsqueeze(2))
         return heat_loss, cool_loss, heat_prob_loss, cool_prob_loss
 
     def training_step(self, batch, batch_idx):

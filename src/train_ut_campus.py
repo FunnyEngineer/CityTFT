@@ -53,7 +53,7 @@ def train(config):
     # }
 
     logger = TensorBoardLogger('', name='ut_campus',
-                               version='trans_prob_hidden64_dropout8e-1')
+                               version='trans_prob_hidden64_dropout8e-1_loadDiffL1_focalLoss')
 
     save_best, save_last = setting_logger()
 
@@ -153,5 +153,5 @@ if __name__ == '__main__':
     else:
         config = TRAIN_CONFIGS['local']
     # normal train
-    # train(config)
-    TFT_train(config)
+    train(config)
+    # TFT_train(config)
