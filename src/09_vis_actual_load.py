@@ -59,6 +59,50 @@ def plot_heat_cool_seq_batch(pred_dict, start_bi=0):
     plt.savefig('figs/demonstration_overall.png')
 
 
+def plot_heat_cool_closer(pred_dict, start_bi=0):
+    fig, axs = plt.subplots(2, 1, figsize=(20, 8))
+    for row, ax in enumerate(axs):
+        plot_true = False
+        # set global font size larger
+        plt.rcParams.update({'font.size': 20})
+        ax.set_title(['Heating loads', 'Cooling loads'][row])
+
+        target_len = 1152
+
+        true_c = ['red', 'blue'][row]
+        long_si = [450, 1050]
+        short_si = 735
+        for mode in pred_dict:
+            predictions = pred_dict[mode]
+            heat_true = torch.zeros(target_len)
+            heat_pred = torch.zeros(target_len)
+            i = 0
+            bi = start_bi
+            while target_len > i:
+                batch_len = predictions[bi][1][:,:, 0].nelement()
+                if (target_len-i) >= batch_len:
+                    heat_true[i:i+batch_len] = predictions[bi][1][:, :, row].flatten()
+                    heat_pred[i:i+batch_len] = predictions[bi][0][row].flatten()
+                else:
+                    heat_true[i:] = predictions[bi][1][:, :, row].flatten()[:(target_len-i)]
+                    heat_pred[i:] = predictions[bi][0][row].flatten()[:(target_len-i)]
+                i += batch_len
+                bi += 1
+            if plot_true == False:
+                ax.plot(range(short_si, short_si+72), heat_true[short_si:short_si+72].cpu(), color=true_c, label='CitySim', lw=2)
+
+                plot_true = True
+            ax.plot(range(short_si, short_si+72), heat_pred[short_si:short_si+72].cpu(), color=cool_dict[mode], label=f'{mode}', ls='-.')
+            # limit x range to 0 and length of target
+            ax.set_xlim(short_si, short_si+72)
+        # larger x and y ticks
+        ax.tick_params(axis='both', which='major', labelsize=18)
+        # legend with smaller font size
+        ax.legend(prop={'size': 18})
+    
+    # plt.show()
+    plt.savefig('figs/demonstration_closer.png')
+
 def visual_load_differences():
 
     # load the model
@@ -79,7 +123,8 @@ def visual_load_differences():
     rnn_pred = pickle.load(open('predictions/rnn_last.pkl', 'rb'))
     trans_pred = pickle.load(open('predictions/trans_last.pkl', 'rb'))
     tft_pred = pickle.load(open('predictions/tft_last.pkl', 'rb'))
-    plot_heat_cool_seq_batch({'RNN': rnn_pred, 'Transformer': trans_pred, 'TFT': tft_pred}, 1520)
+    # plot_heat_cool_seq_batch({'RNN': rnn_pred, 'Transformer': trans_pred, 'TFT': tft_pred}, 1520)
+    plot_heat_cool_closer({'RNN': rnn_pred, 'Transformer': trans_pred, 'TFT': tft_pred}, 1520)
     pdb.set_trace()
 
 
