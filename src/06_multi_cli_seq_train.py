@@ -1,9 +1,10 @@
-import argparse
+from omegaconf import OmegaConf, DictConfig
 from dataset.dataset import CitySimDataModule
-from model.base import Net
-from model.rnn import RNNSeqNetV2
-from model.transformer import TransNetV2
-from model.model_tft import TemporalFusionTransformer
+# from model.base import Net
+# from model.rnn import RNNSeqNetV2
+from model.clean_rnn import CityModule
+# from model.transformer import TransNetV2
+# from model.model_tft import TemporalFusionTransformer
 from configs.configuration import CONFIGS
 
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -13,47 +14,46 @@ import torch
 torch.set_float32_matmul_precision('high')
 L.seed_everything(1340)
 
-training_version = 'rnn_seq_v0'
-input_dim = 26
-input_seq_len = 24
 
 def setting_logger():
     # store the best model and the last model
     save_best = ModelCheckpoint(
-        save_top_k=3,
+        save_top_k=2,
         monitor='val/total_loss',
         mode='min',
         save_last=True,
-        filename='epoch={epoch:02d}-step={global_step}-val_loss={val/total_loss:.8f}',
+        filename='epoch={epoch:02d}-step={step}-val_loss={val/total_loss:.8f}',
         auto_insert_metric_name=False,
     )
     save_last = ModelCheckpoint(
-        save_top_k=3,
-        monitor="global_step",
-        mode="max",
-        filename='epoch={epoch:02d}-step={global_step}-val_loss={val/total_loss:.8f}',
+        save_top_k=2,
+        monitor='step',
+        mode='max',
+        filename='epoch={epoch:02d}-step={step}-val_loss={val/total_loss:.8f}',
         auto_insert_metric_name=False,
     )
     return save_best, save_last
 
 
-def train():
-    logger = TensorBoardLogger('', name='multi_cli', version='rnn_v2_hidden32_dropout8e-1')
+def train(config: DictConfig):
+    logger = TensorBoardLogger('', name='multi_cli', version=config.version)
 
     save_best, save_last = setting_logger()
     # train the model
-    trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1,
+    trainer = L.Trainer(max_epochs=config.num_epochs, logger=logger, check_val_every_n_epoch=1,
                         callbacks=[save_last, save_best])
 
     # init datamodule
-    dm = CitySimDataModule(input_ts=input_seq_len, output_ts=input_seq_len)
+    dm = CitySimDataModule(scaling=config.scaling, batch_size=config.batch_size, input_ts=config.in_seq_len, output_ts=config.in_seq_len)
     dm.setup(stage='fit')
+    config.num_batches = len(dm.train_dataloader())
 
     # init model
-    # model = RNNSeqNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
-    # model = RNNEmbedNet(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
-    # model = TransNetV2(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len)
-    model = RNNSeqNetV2(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len, hidden_dim=32, dropout=0.8)
+    # model = RNNSeqNet(input_dim=config.model.input_dim, input_ts=config.in_seq_len, output_ts=config.in_seq_len)
+    # model = RNNEmbedNet(input_dim=config.model.input_dim, input_ts=config.in_seq_len, output_ts=config.in_seq_len)
+    # model = TransNetV2(input_dim=config.model.input_dim, input_ts=config.in_seq_len, output_ts=config.in_seq_len)
+    # model = RNNSeqNetV2(input_dim=config.model.input_dim, input_ts=config.in_seq_len, output_ts=config.in_seq_len, hidden_dim=32, dropout=0.8)
+    model = CityModule(config)
 
     # train the model
     trainer.fit(model, datamodule=dm)
@@ -62,12 +62,12 @@ def train():
     # test the model
     trainer.test(model, datamodule=dm)
 
-def validate():
+def validate(config):
     trainer = L.Trainer()
 
-    dm = CitySimDataModule(input_ts=input_seq_len, output_ts=input_seq_len)
+    dm = CitySimDataModule(input_ts=config.in_seq_len, output_ts=config.in_seq_len)
     dm.setup(stage='fit')
-    model = RNNSeqNetV2(input_dim=input_dim, input_ts=input_seq_len, output_ts=input_seq_len).load_from_checkpoint('multi_cli/rnn_with_prob_quantile_v3_adamW_lr1e-4/checkpoints/epoch=227-step=2075447.125-val_loss=2.16468382.ckpt')
+    model = RNNSeqNetV2(input_dim=config.model.input_dim, input_ts=config.in_seq_len, output_ts=config.in_seq_len).load_from_checkpoint('multi_cli/rnn_with_prob_quantile_v3_adamW_lr1e-4/checkpoints/epoch=227-step=2075447.125-val_loss=2.16468382.ckpt')
 
     trainer.validate(model, datamodule=dm)
 
@@ -78,7 +78,7 @@ def TFT_train(args):
     trainer = L.Trainer(max_epochs=400, logger=logger, check_val_every_n_epoch=1,
                         callbacks=[save_last, save_best])
 
-    dm = CitySimDataModule(input_ts=input_seq_len, output_ts=input_seq_len, mode='tft')
+    dm = CitySimDataModule(input_ts=config.in_seq_len, output_ts=config.in_seq_len, mode='tft')
 
     dm.setup(stage='fit')
     # darts version
@@ -95,7 +95,10 @@ def TFT_train(args):
 
 if __name__ == '__main__':
     # normal train
-    train()
+    cli_conf = OmegaConf.from_cli()
+    file_conf = OmegaConf.load(cli_conf.config_path)
+    config = OmegaConf.merge(file_conf, cli_conf)
+    train(config)
 
     # validate
     # validate()
@@ -108,8 +111,8 @@ if __name__ == '__main__':
     # parser.add_argument('--epochs', type=int, default=25,
     #                     help='Default number of training epochs')
     # parser.add_argument('--sample_data', type=lambda x: int(float(x)), nargs=2, default=[-1, -1],
-    #                     help="""Subsample the dataset. Specify number of training and valid examples.
-    #                     Values can be provided in scientific notation. Floats will be truncated.""")
+    #                     help='''Subsample the dataset. Specify number of training and valid examples.
+    #                     Values can be provided in scientific notation. Floats will be truncated.''')
     # parser.add_argument('--batch_size', type=int, default=64)
     # parser.add_argument('--lr', type=float, default=1e-3)
     # parser.add_argument('--seed', type=int, default=1)
@@ -131,9 +134,9 @@ if __name__ == '__main__':
     #                              'socket_unique_continuous',
     #                              'disabled'],
     #                     help='type of CPU affinity')
-    # parser.add_argument("--ema_decay", type=float, default=0.0,
+    # parser.add_argument('--ema_decay', type=float, default=0.0,
     #                     help='Use exponential moving average')
-    # parser.add_argument("--disable_benchmark", action='store_true',
+    # parser.add_argument('--disable_benchmark', action='store_true',
     #                     help='Disable benchmarking mode')
     # ARGS = parser.parse_args()
     # TFT_train(ARGS)
